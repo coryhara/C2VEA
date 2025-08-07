@@ -1,0 +1,54 @@
+services:
+  mariadb:
+    build:
+      context: ../Database
+      dockerfile: Dockerfile
+    container_name: Database
+    environment:
+      TZ: Asia/Seoul
+      MARIADB_USER: archive
+      MARIADB_PASSWORD: archive
+      MARIADB_DATABASE: archive
+      MARIADB_ROOT_PASSWORD: archive
+    volumes:
+      - ../Database/init-scripts:/docker-entrypoint-initdb.d
+      - ../Data/Database/mariadb-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    restart: always
+    networks:
+      - mariadb_network
+
+  api-server:
+    build:
+      context: ../APIServer
+      dockerfile: Dockerfile
+    container_name: APIServer
+    depends_on:
+      - mariadb
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../Data/cve:/app/cve
+      - ../Data/poc_sources:/app/poc_sources
+      - ../Data/backups:/app/backups
+    restart: always
+    networks:
+      - mariadb_network
+
+  spring-app:
+    build:
+      context: ../Application
+      dockerfile: Dockerfile
+    container_name: Application
+    depends_on:
+      - mariadb
+    ports:
+      - "8080:8080"
+    restart: always
+    networks:
+      - mariadb_network
+
+networks:
+  mariadb_network:
+    driver: bridge
