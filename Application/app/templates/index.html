@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- ✅ 최신 socket.io-client 4.x 버전만 사용 -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
+  <meta charset="UTF-8" />
+  <title>Real-Time Log Viewer</title>
+  <style>
+    /* 스타일 부분은 그대로 */
+    body { background:#121212; color:#8de0d6; font-family:'Courier New', monospace; margin:2rem; }
+    h1 { color:#74cfc5; text-shadow:0 0 2px #2d837c; }
+    #controls { margin:1.5rem 0; }
+    button { margin:.3rem; padding:.6rem 1.2rem; background:#1f1f1f; border:1px solid #5aaba2; color:#8de0d6;
+      font-weight:bold; cursor:pointer; border-radius:4px; transition:.2s; }
+    button:hover { background:#2d2d2d; color:#b0fff5; border-color:#8de0d6; }
+    #alerts, #loadings { margin-bottom:1rem; padding:10px; background:#1c1c1c; border-left:4px solid #c77d4c; color:#e2cbb5; }
+    #alerts div, #loadings div { margin-bottom:6px; }
+    .loading-msg { color:#ffd966; font-weight:bold; font-size:16px; animation:pulse 1s infinite; }
+    @keyframes pulse { 0%{opacity:.4} 50%{opacity:1} 100%{opacity:.4} }
+    table { width:100%; border-collapse:collapse; margin-top:1rem; }
+    th, td { border:1px solid #2a2a2a; padding:8px 12px; text-align:left; }
+    th { background:#202020; color:#99d3cc; }
+    tbody { font-size:14px; }
+    tr:nth-child(even){ background:#181818; }
+    tr:hover{ background:#222; }
+  </style>
+</head>
+<body>
+  <h1>🧪 REAL-TIME LOG VIEWER</h1>
+
+  <div id="controls">
+    <button onclick="run('run-main')">Run Main</button>
+    <button onclick="run('run-cve')">Run CVE</button>
+    <button onclick="run('run-github')">Run GitHub</button>
+    <button onclick="run('run-backup')">Run Backup</button>
+  </div>
+
+  <div id="loadings">🕒 Loading tasks will be shown here...</div>
+  <div id="alerts">📢 Notification messages will appear here.</div>
+
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Status</th><th>Message</th><th>Time (KST)</th></tr>
+    </thead>
+    <tbody id="logTableBody"></tbody>
+  </table>
+
+  <script>
+    const tableBody = document.getElementById("logTableBody");
+    const alerts = document.getElementById("alerts");
+    const loadings = document.getElementById("loadings");
+    const logs = [];
+    const MAX_LOGS = 1000;
+    const activeTasks = new Set();
+
+    const socket = io("http://localhost:8080", { 
+      path: "/socket.io/", 
+      transports: ["websocket"] 
+    });
+
+    socket.on("connect", () => {
+      console.log("Connected:", socket.id);
+      socket.emit("subscribe_logs", { last_id: 0 });
+    });
+
+    socket.on("hello", () => {});
+
+    socket.on("logs", (rows) => {
+      for (const log of rows) {
+        logs.unshift(log);
+        if (logs.length > MAX_LOGS) logs.pop();
+      }
+      renderLogs();
+    });
+
+    socket.on("notify", (msg) => {
+      showAlert(msg.message);
+      const lower = (msg.label || "").toLowerCase();
+      if (activeTasks.has(lower)) removeLoading(lower);
+    });
+
+    function renderLogs() {
+      const fragment = document.createDocumentFragment();
+      for (const log of logs) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${log.id}</td>
+          <td>${escapeHtml(log.status || "")}</td>
+          <td>${escapeHtml(log.message || "")}</td>
+          <td>${log.log_time || ""}</td>
+        `;
+        fragment.appendChild(tr);
+      }
+      tableBody.innerHTML = "";
+      tableBody.appendChild(fragment);
+    }
+
+    function run(api) {
+      const task = api.replace("run-", "").toLowerCase();
+      if (activeTasks.has(task)) {
+        showAlert("❌ Task already running: " + task);
+        return;
+      }
+      activeTasks.add(task);
+      addLoading(task);
+
+      fetch("/" + api)
+        .then(r => r.json().catch(() => ({})).then(j => ({ ok: r.ok, json: j })))
+        .then(({ ok, json }) => {
+          showAlert((ok ? "✅ " : "❌ ") + (json.message || "(no message)"));
+        })
+        .catch(err => {
+          showAlert("❌ Request failed: " + err.message);
+          removeLoading(task);
+        });
+    }
+
+    function showAlert(message) {
+      const div = document.createElement("div");
+      div.textContent = message;
+      if (message.startsWith("✅")) div.style.color = "#90ee90";
+      else if (message.startsWith("❌")) div.style.color = "#f08080";
+      else div.style.color = "#e2cbb5";
+      alerts.prepend(div);
+      setTimeout(() => { if (alerts.contains(div)) alerts.removeChild(div); }, 10000);
+    }
+
+    function addLoading(task) {
+      const div = document.createElement("div");
+      div.textContent = `⏳ Loading... [${task}]`;
+      div.id = `loading-${task}`;
+      div.classList.add("loading-msg");
+      loadings.appendChild(div);
+    }
+
+    function removeLoading(task) {
+      activeTasks.delete(task);
+      const div = document.getElementById(`loading-${task}`);
+      if (div) loadings.removeChild(div);
+    }
+
+    function escapeHtml(s) {
+      return (s || "").replace(/[&<>"']/g, c => ({
+        '&':'&amp;',
+        '<':'&lt;',
+        '>':'&gt;',
+        '"':'&quot;',
+        "'":'&#39;'
+      }[c]));
+    }
+  </script>
+</body>
+</html>

@@ -93,7 +93,7 @@ class GitHubPoCCollector:
 
     def search_github_repos(self, cve_id):
         headers = {"Authorization": f"token {self.github_token}"}
-        url = f"https://api.github.com/search/repositories?q={cve_id}"
+        url = f"https://api.github.com/search/repositories?q='{cve_id}'"
         retries = 0
 
         while retries < self.max_retries:

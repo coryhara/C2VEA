@@ -36,16 +36,33 @@ services:
     networks:
       - mariadb_network
 
-  spring-app:
+  web-app:
     build:
       context: ../Application
       dockerfile: Dockerfile
     container_name: Application
     depends_on:
       - mariadb
+    env_file:
+      - ../Application/.env
+    environment:
+      TZ: Asia/Seoul
     ports:
       - "8080:8080"
-    restart: always
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - mariadb_network
 
