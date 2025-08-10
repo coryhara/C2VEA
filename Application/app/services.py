@@ -26,7 +26,7 @@ def extract_message(body: str) -> str:
 def call_fastapi(endpoint: str, label: str) -> str:
     base = current_app.config["API_BASE"].rstrip("/")
     url = f"{base}{endpoint}"
-    r = requests.get(url, timeout=60)
+    r = requests.get(url, timeout=300)
     r.raise_for_status()
     msg = extract_message(r.text)
     busy = "another user's request is currently being processed" in msg.lower()
