@@ -6,3 +6,5 @@ requests==2.32.3
 beautifulsoup4==4.12.3
 gunicorn==22.0.0
 python-dotenv==1.0.1
+pdfkit==1.0.0
+Werkzeug==3.0.3

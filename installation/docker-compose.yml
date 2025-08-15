@@ -23,9 +23,13 @@ services:
     build:
       context: ../APIServer
       dockerfile: Dockerfile
+      args:
+        APP_UID: 1000
+        APP_GID: 1000
     container_name: APIServer
     depends_on:
       - mariadb
+    user: "1000:1000"
     ports:
       - "8000:8000"
     volumes:
@@ -40,6 +44,9 @@ services:
     build:
       context: ../Application
       dockerfile: Dockerfile
+      args:
+        APP_UID: 1000
+        APP_GID: 1000
     container_name: Application
     depends_on:
       - mariadb
@@ -47,15 +54,17 @@ services:
       - ../Application/.env
     environment:
       TZ: Asia/Seoul
+    user: "1000:1000"
     ports:
       - "8080:8080"
+    volumes:
+      - ../Data/poc_sources:/app/poc_sources
     restart: unless-stopped
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
-    read_only: true
     tmpfs:
       - /tmp
       - /run
