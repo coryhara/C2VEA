@@ -171,16 +171,13 @@ class GitHubPoCCollector:
                     return file_paths
                 except Exception as extract_err:
                     self.log_to_db("WARNING", f"{owner}/{name} - zip extraction failed, storing zip only: {extract_err}")
-                    # Only return the path to the saved zip file
                     return [zip_path]
 
             except Exception as e:
                 self.log_to_db("FAILURE", f"{owner}/{name} download exception: {e}")
                 retries += 1
                 time.sleep(self.retry_interval)
-
         return []
-
 
     def insert_poc_info(self, cve_id, url, file_paths, sha):
         try:

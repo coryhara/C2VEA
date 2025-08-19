@@ -32,10 +32,8 @@ def register_socket_handlers(socketio, app):
     def on_connect():
         emit("hello", {"ok": True})
 
-    # ✅ client asks for current running tasks (for refresh/reopen)
     @socketio.on("request_active")
     def on_request_active():
-        # send snapshot, most-recent first (optional ordering)
         snapshot = []
         for v in sorted(_active_tasks.values(), key=lambda x: x["updated"], reverse=True):
             snapshot.append({"type": "active", "label": v["label"], "progress": v["progress"]})

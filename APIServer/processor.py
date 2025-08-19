@@ -28,7 +28,14 @@ class CVEProcessor:
         self.conn = None
         self.cursor = None
 
-        self.interval = float(os.getenv("INTERVAL", 2.0))  # ✅ .env에서 INTERVAL 사용
+        self.interval = float(os.getenv("INTERVAL", 2.0))
+
+        # ✅ stop flag
+        self._stop = False
+
+    def stop(self):
+        """외부에서 실행 중단 요청"""
+        self._stop = True
 
     def get_cve_base_dir(self):
         return self.cve_base_dir
@@ -61,6 +68,10 @@ class CVEProcessor:
         all_vulnerabilities = []
 
         while True:
+            if self._stop:  # ✅ stop check
+                self.log_to_db("INFO", "Stopped during request loop.")
+                break
+
             params = {
                 "pubStartDate": pub_start,
                 "pubEndDate": pub_end,
@@ -79,7 +90,7 @@ class CVEProcessor:
             if len(vulnerabilities) < 2000:
                 break
             start_index += 2000
-            time.sleep(self.interval)  # ✅ interval 적용
+            time.sleep(self.interval)
 
         return response, all_vulnerabilities
 
@@ -89,6 +100,10 @@ class CVEProcessor:
 
         chunk_size = 2000
         for i in range(0, len(vulnerabilities), chunk_size):
+            if self._stop:  # ✅ stop check
+                self.log_to_db("INFO", "Stopped during save_cves.")
+                break
+
             chunk = vulnerabilities[i:i + chunk_size]
             chunk_num = (i // chunk_size) + 1
             file_name = f"{year}-{month:02d}-{chunk_num:02d}_cves.json"
@@ -103,12 +118,16 @@ class CVEProcessor:
         month = self.start_month
 
         while (year < self.end_year) or (year == self.end_year and month <= self.end_month):
+            if self._stop:  # ✅ stop check
+                self.log_to_db("INFO", "Processing stopped by user request.")
+                break
+
             self.log_to_db("INFO", f"Processing {year}-{month:02d}...")
             response, vulnerabilities = self.request_cve(year, month)
-            time.sleep(self.interval)  # ✅ interval 적용
+            time.sleep(self.interval)
 
-            if response.status_code != 200 or vulnerabilities is None:
-                self.log_to_db("ERROR", f"Error {response.status_code} for {year}-{month:02d}")
+            if response is None or response.status_code != 200 or vulnerabilities is None:
+                self.log_to_db("ERROR", f"Error {response.status_code if response else 'None'} for {year}-{month:02d}")
                 fail_list.append((year, month))
             else:
                 self.save_cves(year, month, vulnerabilities)
@@ -124,27 +143,31 @@ class CVEProcessor:
 
     def retry_failed_requests(self, fail_list):
         while fail_list:
+            if self._stop:  # ✅ stop check
+                self.log_to_db("INFO", "Retry loop stopped by user request.")
+                break
+
             year, month = fail_list[0]
             self.log_to_db("INFO", f"Retrying {year}-{month:02d}...")
             response, vulnerabilities = self.request_cve(year, month)
 
-            if response.status_code == 200 and vulnerabilities:
+            if response and response.status_code == 200 and vulnerabilities:
                 self.log_to_db("INFO", f"Success: {year}-{month:02d}")
                 self.save_cves(year, month, vulnerabilities)
                 fail_list.pop(0)
-                time.sleep(self.interval)  # ✅ interval 적용
+                time.sleep(self.interval)
             else:
-                self.log_to_db("ERROR", f"Still failed: {year}-{month:02d} (status {response.status_code})")
-                time.sleep(self.interval * 5)  # ✅ 실패 시엔 더 긴 대기
+                self.log_to_db("ERROR", f"Still failed: {year}-{month:02d} (status {response.status_code if response else 'None'})")
+                time.sleep(self.interval * 5)
 
     def run(self):
         self.open_db()
         self.log_to_db("INFO", "Starting CVE processing...")
         fail_list = self.process_cves()
-        if fail_list:
+        if not self._stop and fail_list:
             self.log_to_db("INFO", "Starting retries...")
             self.retry_failed_requests(fail_list)
-        else:
+        elif not self._stop:
             self.log_to_db("INFO", "All requests succeeded!")
         self.log_to_db("INFO", "Program finished.")
         self.close_db()

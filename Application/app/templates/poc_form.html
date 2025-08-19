@@ -32,6 +32,8 @@
 
   <div id="controls">
     <button onclick="window.location.href='/'">← Back to Logs</button>
+    <!-- ✅ Stop 버튼 추가 -->
+    <button onclick="stopTasks()">🛑 Stop</button>
   </div>
 
   <div id="loadings">🕒 Loading tasks will be shown here...</div>
@@ -77,11 +79,9 @@
 
     socket.on("connect", () => {
       console.log("Connected:", socket.id);
-      // ✅ 페이지 진입 시 현재 진행중 작업 요청
       socket.emit("request_active");
     });
 
-    // 현재 진행중 작업 스냅샷 반영
     socket.on("active", (items) => {
       if (!Array.isArray(items)) return;
       for (const it of items) {
@@ -130,6 +130,23 @@
       activeTasks.delete(task);
       const div = document.getElementById(`loading-${task}`);
       if (div) loadings.removeChild(div);
+    }
+
+    // ✅ Stop 버튼 동작
+    function stopTasks() {
+      fetch("/stop")
+        .then(r => r.json().catch(() => ({})).then(j => ({ ok: r.ok, json: j })))
+        .then(({ ok, json }) => {
+          showAlert((ok ? "✅ " : "❌ ") + (json.message || "(no message)"));
+          if (ok) {
+            for (const task of Array.from(activeTasks)) {
+              removeLoading(task);
+            }
+          }
+        })
+        .catch(err => {
+          showAlert("❌ Stop request failed: " + err.message);
+        });
     }
   </script>
 </body>

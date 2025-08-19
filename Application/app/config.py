@@ -32,7 +32,6 @@ def load_config() -> Config:
 
     missing = [var for var in required_vars if not (os.getenv(var) and os.getenv(var).strip())]
     if missing:
-        # 줄바꿈 포함해서 어떤 키가 빠졌는지 명확히
         raise RuntimeError("필수 환경변수가 누락되었습니다:\n - " + "\n - ".join(missing))
 
     return Config(

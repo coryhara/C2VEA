@@ -44,6 +44,35 @@ def run_backup():
     _dispatch("/run-backup", "Backup")
     return jsonify({"status": "started", "label": "Backup", "message": "Backup request started"}), 202
 
+# =========================
+# Stop 요청
+# =========================
+@bp.get("/stop")
+def stop_task():
+    label = "Stop"
+    app = current_app._get_current_object()
+    key = label.lower()
+
+    start_task(key)
+    socketio.emit("active", [{"type": "active", "label": key, "progress": None}])
+
+    def _task():
+        with app.app_context():
+            final = False
+            try:
+                msg = call_fastapi("/stop", key)   # 🚨 FastAPI stop API 호출
+                final = _is_final_message(msg)
+            except Exception as e:
+                msg = f"❌ Stop request failed → {e}"
+            finally:
+                if final:
+                    finish_task(key)
+                socketio.emit("notify", {"type": "notify", "label": label, "message": msg})
+
+    from . import socketio as _socketio
+    _socketio.start_background_task(_task)
+
+    return jsonify({"status": "started", "label": label, "message": "Stop request sent"}), 202
 
 # ==========================================================
 # PoC Insert
@@ -164,7 +193,6 @@ def _dispatch(endpoint: str, label: str):
 
     from . import socketio as _socketio
     _socketio.start_background_task(_task)
-
 
 def _is_final_message(message: str) -> bool:
     m = (message or "").lower()

@@ -33,6 +33,8 @@
       <button onclick="run('run-cve')">Run CVE</button>
       <button onclick="run('run-github')">Run GitHub</button>
       <button onclick="run('run-backup')">Run Backup</button>
+      <!-- ✅ Stop 버튼 -->
+      <button onclick="stopTasks()">🛑 Stop</button>
   </div>
 
   <div id="loadings">🕒 Loading tasks will be shown here...</div>
@@ -61,14 +63,9 @@
     socket.on("connect", () => {
       console.log("Connected:", socket.id);
       socket.emit("subscribe_logs", { last_id: 0 });
-
-      // ✅ 새로고침/재접속 시 진행중 작업 스냅샷 요청
-      socket.emit("request_active");
+      socket.emit("request_active"); // 재접속 시 진행중 작업 상태 요청
     });
 
-    socket.on("hello", () => {});
-
-    // ✅ 서버가 보내는 현재 진행중 작업 스냅샷을 반영
     socket.on("active", (items) => {
       if (!Array.isArray(items)) return;
       for (const it of items) {
@@ -78,7 +75,6 @@
           activeTasks.add(task);
           addLoading(task);
         }
-        // 필요하면 it.progress 처리 가능
       }
     });
 
@@ -90,7 +86,6 @@
       renderLogs();
     });
 
-    // ✅ 완료(최종) 메시지일 때만 로딩 제거
     socket.on("notify", (msg) => {
       showAlert(msg.message);
       const lower = (msg.label || "").toLowerCase();
@@ -99,7 +94,6 @@
       }
     });
 
-    // 최종 완료 메시지 판정(원하는 키워드 추가/수정 가능)
     function isFinalMessage(message) {
       const m = String(message || "").toLowerCase();
       return /\b(done|completed|finished|success(?:ful|fully)?|all tasks complete|backup complete|cve (?:job|sync) complete)\b/.test(m);
@@ -141,6 +135,24 @@
         });
     }
 
+    // ✅ Stop 버튼 함수
+    function stopTasks() {
+      fetch("/stop")
+        .then(r => r.json().catch(() => ({})).then(j => ({ ok: r.ok, json: j })))
+        .then(({ ok, json }) => {
+          showAlert((ok ? "✅ " : "❌ ") + (json.message || "(no message)"));
+          if (ok) {
+            // 모든 activeTasks 제거
+            for (const task of Array.from(activeTasks)) {
+              removeLoading(task);
+            }
+          }
+        })
+        .catch(err => {
+          showAlert("❌ Stop request failed: " + err.message);
+        });
+    }
+
     function showAlert(message) {
       const div = document.createElement("div");
       div.textContent = message;
@@ -152,7 +164,6 @@
     }
 
     function addLoading(task) {
-      // 중복 방지
       if (document.getElementById(`loading-${task}`)) return;
       const div = document.createElement("div");
       div.textContent = `⏳ Loading... [${task}]`;
