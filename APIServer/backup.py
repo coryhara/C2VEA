@@ -13,11 +13,17 @@ class DatabaseBackup:
         self.db_name = db_config.get("database")
         self.backup_dir = backup_dir
         self.dump_path = dump_path
+        self._stop = False
 
         if not all([self.db_user, self.db_password, self.db_name]):
             raise ValueError("❌ DB_CONFIG must contain 'user', 'password', and 'database'.")
 
         os.makedirs(self.backup_dir, exist_ok=True)
+
+    def stop(self):
+        """외부에서 실행 중단 요청"""
+        self._stop = True
+        print("ℹDatabaseBackup stopped by user request.")
 
     def log(self, status: str, message: str):
         """Insert a log entry into the logs table."""

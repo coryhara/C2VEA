@@ -1,4 +1,3 @@
-# app/routes.py
 from flask import Blueprint, render_template, jsonify, current_app, request, redirect
 from werkzeug.utils import secure_filename
 from pathlib import Path
@@ -9,7 +8,6 @@ import pdfkit
 
 from .services import call_fastapi
 from . import socketio
-from .sockets import start_task, finish_task
 from .db import get_conn
 
 bp = Blueprint("main", __name__)
@@ -51,22 +49,14 @@ def run_backup():
 def stop_task():
     label = "Stop"
     app = current_app._get_current_object()
-    key = label.lower()
-
-    start_task(key)
-    socketio.emit("active", [{"type": "active", "label": key, "progress": None}])
 
     def _task():
         with app.app_context():
-            final = False
             try:
-                msg = call_fastapi("/stop", key)   # 🚨 FastAPI stop API 호출
-                final = _is_final_message(msg)
+                msg = call_fastapi("/stop", label.lower())
             except Exception as e:
                 msg = f"❌ Stop request failed → {e}"
             finally:
-                if final:
-                    finish_task(key)
                 socketio.emit("notify", {"type": "notify", "label": label, "message": msg})
 
     from . import socketio as _socketio
@@ -168,36 +158,27 @@ def poc_upload():
         conn.close()
 
 # =========================
-# 내부: 작업 디스패처
+# Status → FastAPI 위임
+# =========================
+@bp.get("/status")
+def status():
+    msg = call_fastapi("/status", "status")
+    return jsonify(msg)
+
+# =========================
+# 내부: 작업 디스패처 (단순화)
 # =========================
 def _dispatch(endpoint: str, label: str):
     app = current_app._get_current_object()
 
-    key = (label or "").strip().lower() or "task"
-
-    start_task(key)
-    socketio.emit("active", [{"type": "active", "label": key, "progress": None}])
-
     def _task():
         with app.app_context():
-            final = False
             try:
-                msg = call_fastapi(endpoint, key)
-                final = _is_final_message(msg)
+                msg = call_fastapi(endpoint, label.lower())
             except Exception as e:
                 msg = f"❌ {label} → {e}"
             finally:
-                if final:
-                    finish_task(key)
                 socketio.emit("notify", {"type": "notify", "label": label, "message": msg})
 
     from . import socketio as _socketio
     _socketio.start_background_task(_task)
-
-def _is_final_message(message: str) -> bool:
-    m = (message or "").lower()
-    finals = (
-        " done", " completed", " finished", " success", "successfully",
-        "all tasks complete", "backup complete", "cve job complete", "cve sync complete"
-    )
-    return any(k in m for k in finals)

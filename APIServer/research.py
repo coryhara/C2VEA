@@ -21,9 +21,15 @@ class GitHubPoCCollector:
         self.download_interval = download_interval
         self.retry_interval = retry_interval
         self.max_retries = max_retries
+        self._stop = False
 
     def _get_conn(self):
         return pymysql.connect(**self.db_config)
+
+    def stop(self):
+        """외부에서 실행 중단 요청"""
+        self._stop = True
+        self.log_to_db("INFO", "GitHubPoCCollector stop flag set.")
 
     def log_to_db(self, status, message):
         try:
@@ -37,6 +43,8 @@ class GitHubPoCCollector:
             print(f"[Log Write Failed] {status}: {e}")
 
     def get_recent_cves(self):
+        if self._stop:
+            return []
         try:
             with self._get_conn() as conn, conn.cursor(DictCursor) as cursor:
                 cursor.execute("SELECT DISTINCT cve_id FROM cve_vulnerabilities")
@@ -52,11 +60,16 @@ class GitHubPoCCollector:
             reset = int(response.headers["X-RateLimit-Reset"])
             wait_time = max(reset - int(time.time()), 0)
             self.log_to_db("INFO", f"Rate limit hit. Sleeping {wait_time}s.")
-            time.sleep(wait_time + 1)
+            for _ in range(wait_time + 1):
+                if self._stop:   # ✅ 대기 중에도 중단 가능
+                    return True
+                time.sleep(1)
             return True
         return False
 
     def get_latest_commit_sha(self, owner, repo):
+        if self._stop:
+            return None
         headers = {"Authorization": f"token {self.github_token}"}
         url = f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=1"
 
@@ -76,6 +89,8 @@ class GitHubPoCCollector:
             return None
 
     def is_same_commit_sha(self, cve_id, url, sha):
+        if self._stop:
+            return False
         try:
             with self._get_conn() as conn, conn.cursor(DictCursor) as cursor:
                 cursor.execute("""
@@ -92,17 +107,23 @@ class GitHubPoCCollector:
             return False
 
     def search_github_repos(self, cve_id):
+        if self._stop:
+            return []
         headers = {"Authorization": f"token {self.github_token}"}
         url = f"https://api.github.com/search/repositories?q='{cve_id}'"
         retries = 0
 
         while retries < self.max_retries:
+            if self._stop:   # ✅ 중간에 끊기
+                return []
             try:
                 res = requests.get(url, headers=headers)
                 if self.github_rate_limit_wait(res):
                     continue
 
                 time.sleep(self.request_interval)
+                if self._stop:
+                    return []
 
                 if res.status_code == 200:
                     repos = res.json().get("items", [])
@@ -119,17 +140,23 @@ class GitHubPoCCollector:
         return []
 
     def download_repo_zip(self, owner, name, dest_dir):
+        if self._stop:
+            return []
         headers = {"Authorization": f"token {self.github_token}"}
         repo_info_url = f"https://api.github.com/repos/{owner}/{name}"
         retries = 0
 
         while retries < self.max_retries:
+            if self._stop:
+                return []
             try:
                 repo_info = requests.get(repo_info_url, headers=headers)
                 if self.github_rate_limit_wait(repo_info):
                     continue
 
                 time.sleep(self.request_interval)
+                if self._stop:
+                    return []
 
                 if repo_info.status_code != 200:
                     self.log_to_db("FAILURE", f"{owner}/{name} repo info failed.")
@@ -145,6 +172,8 @@ class GitHubPoCCollector:
                     continue
 
                 time.sleep(self.request_interval)
+                if self._stop:
+                    return []
 
                 if res.status_code != 200:
                     self.log_to_db("FAILURE", f"{owner}/{name} zip download failed.")
@@ -165,6 +194,8 @@ class GitHubPoCCollector:
 
                     file_paths = []
                     for root, _, files in os.walk(repo_dir):
+                        if self._stop:
+                            return []
                         for file in files:
                             file_paths.append(os.path.join(root, file))
 
@@ -180,6 +211,8 @@ class GitHubPoCCollector:
         return []
 
     def insert_poc_info(self, cve_id, url, file_paths, sha):
+        if self._stop:
+            return
         try:
             with self._get_conn() as conn, conn.cursor() as cursor:
                 cursor.execute("""
@@ -196,6 +229,10 @@ class GitHubPoCCollector:
         self.log_to_db("INFO", f"Start processing {total} CVEs.")
 
         for idx, cve_id in enumerate(cve_list, 1):
+            if self._stop:   # ✅ 중간에 정지
+                self.log_to_db("INFO", "Process stopped before completion.")
+                break
+
             try:
                 percent = round((idx / total) * 100, 5)
                 self.log_to_db("INFO", f"[{idx}/{total}] ({percent}%) Processing {cve_id}")
@@ -206,6 +243,10 @@ class GitHubPoCCollector:
                     continue
 
                 for repo in repos:
+                    if self._stop:   # ✅ repo 단위에서도 체크
+                        self.log_to_db("INFO", "Stopping during repo loop.")
+                        break
+
                     owner = repo['owner']['login']
                     name = repo['name']
                     html_url = repo['html_url']
@@ -221,6 +262,9 @@ class GitHubPoCCollector:
                     repo_dir = os.path.join(self.download_dir, cve_id.replace("/", "_"))
                     file_paths = self.download_repo_zip(owner, name, repo_dir)
 
+                    if self._stop:
+                        break
+
                     if file_paths:
                         self.insert_poc_info(cve_id, html_url, file_paths, latest_sha)
                         self.log_to_db("SUCCESS", f"{cve_id} - new/updated PoC for {name}")
@@ -228,5 +272,6 @@ class GitHubPoCCollector:
                         self.log_to_db("FAILURE", f"{cve_id} - no files from {name}")
 
                     time.sleep(self.download_interval)
+
             except Exception as e:
                 self.log_to_db("FAILURE", f"{cve_id} - general error: {e}")

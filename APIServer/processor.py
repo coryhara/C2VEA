@@ -36,6 +36,7 @@ class CVEProcessor:
     def stop(self):
         """외부에서 실행 중단 요청"""
         self._stop = True
+        self.log_to_db("INFO", "CVEProcessor stopped by user request.")
 
     def get_cve_base_dir(self):
         return self.cve_base_dir
