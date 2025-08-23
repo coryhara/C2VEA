@@ -1,270 +1,30 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <script
-      src="https://cdn.socket.io/4.7.5/socket.io.min.js"
-      crossorigin="anonymous"
-    ></script>
-    <meta charset="UTF-8" />
-    <title>Real-Time Log Viewer</title>
-    <style>
-      body {
-        background: #121212;
-        color: #8de0d6;
-        font-family: "Courier New", monospace;
-        margin: 2rem;
-      }
-      h1 {
-        color: #74cfc5;
-        text-shadow: 0 0 2px #2d837c;
-      }
-      #controls {
-        margin: 1.5rem 0;
-      }
-      button {
-        margin: 0.3rem;
-        padding: 0.6rem 1.2rem;
-        background: #1f1f1f;
-        border: 1px solid #5aaba2;
-        color: #8de0d6;
-        font-weight: bold;
-        cursor: pointer;
-        border-radius: 4px;
-        transition: 0.2s;
-      }
-      button:hover {
-        background: #2d2d2d;
-        color: #b0fff5;
-        border-color: #8de0d6;
-      }
-      #alerts,
-      #loadings {
-        margin-bottom: 1rem;
-        padding: 10px;
-        background: #1c1c1c;
-        border-left: 4px solid #c77d4c;
-        color: #e2cbb5;
-      }
-      #alerts div,
-      #loadings div {
-        margin-bottom: 6px;
-      }
-      .loading-msg {
-        color: #ffd966;
-        font-weight: bold;
-        font-size: 15px;
-        animation: pulse 1s infinite;
-      }
-      @keyframes pulse {
-        0% {
-          opacity: 0.4;
-        }
-        50% {
-          opacity: 1;
-        }
-        100% {
-          opacity: 0.4;
-        }
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 1rem;
-      }
-      th,
-      td {
-        border: 1px solid #2a2a2a;
-        padding: 8px 12px;
-        text-align: left;
-      }
-      th {
-        background: #202020;
-        color: #99d3cc;
-      }
-      tbody {
-        font-size: 14px;
-      }
-      tr:nth-child(even) {
-        background: #181818;
-      }
-      tr:hover {
-        background: #222;
-      }
-      #statusBar {
-        margin: 1rem 0;
-        font-size: 15px;
-        font-weight: bold;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>🧪 REAL-TIME LOG VIEWER</h1>
+{% extends "base.html" %}
+{% block title %}Real-Time Log Viewer{% endblock %}
+{% block header %}🧪 REAL-TIME LOG VIEWER{% endblock %}
 
-    <div id="controls">
-      <button onclick="window.location.href='/poc'">PoC Upload</button>
-      <button onclick="run('run-main')">Run Main (All)</button>
-      <button onclick="run('run-cve')">Run CVE</button>
-      <button onclick="run('run-github')">Run GitHub</button>
-      <button onclick="run('run-backup')">Run Backup</button>
-      <button onclick="stopTasks()">🛑 Stop</button>
-    </div>
+{% block content %}
+<div id="controls">
+  <button onclick="window.location.href='/poc'">PoC Upload</button>
+  <button onclick="run('run-main')">Run Main (All)</button>
+  <button onclick="run('run-cve')">Run CVE</button>
+  <button onclick="run('run-github')">Run GitHub</button>
+  <button onclick="run('run-backup')">Run Backup</button>
+  <button onclick="stopTasks()">🛑 Stop</button>
+</div>
 
-    <div id="statusBar">현재 실행 중: 없음</div>
-    <div id="loadings">🕒 Loading tasks will be shown here...</div>
-    <div id="alerts">📢 Notification messages will appear here.</div>
+<div id="statusBar">No active tasks</div>
+<div id="loadings">⏳ Loading tasks will be shown here...</div>
+<div id="alerts">📢 Notifications will appear here</div>
 
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Status</th>
-          <th>Message</th>
-          <th>Time (KST)</th>
-        </tr>
-      </thead>
-      <tbody id="logTableBody"></tbody>
-    </table>
-
-    <script>
-      const tableBody = document.getElementById("logTableBody");
-      const alerts = document.getElementById("alerts");
-      const loadings = document.getElementById("loadings");
-      const statusBar = document.getElementById("statusBar");
-
-      const logs = [];
-      const MAX_LOGS = 1000;
-
-      // ✅ Socket for logs & notify
-      const socket = io("http://localhost:8080", {
-        path: "/socket.io/",
-        transports: ["websocket"],
-      });
-
-      socket.on("connect", () => {
-        console.log("✅ Socket connected:", socket.id);
-        socket.emit("subscribe_logs", { last_id: 0 });
-      });
-
-      socket.on("logs", (rows) => {
-        for (const log of rows) prependLog(log);
-      });
-
-      socket.on("notify", (msg) => {
-        showAlert(msg.message);
-      });
-
-      // ✅ Logs: prepend 방식
-      function prependLog(log) {
-        logs.unshift(log);
-        if (logs.length > MAX_LOGS) logs.pop();
-
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-        <td>${log.id}</td>
-        <td>${escapeHtml(log.status || "")}</td>
-        <td>${escapeHtml(log.message || "")}</td>
-        <td>${log.log_time || ""}</td>
-      `;
-        tableBody.insertBefore(tr, tableBody.firstChild);
-
-        if (tableBody.rows.length > MAX_LOGS) {
-          tableBody.deleteRow(-1);
-        }
-      }
-
-      // ✅ Run task → 단순히 FastAPI 호출
-      function run(api) {
-        console.log("▶️ [API CALL]", api);
-        fetch("/" + api)
-          .then((r) => r.json().catch(() => ({})))
-          .then((json) => {
-            console.log("📥 [API RESPONSE]", api, json);
-            showAlert(json.message || "(no message)");
-          })
-          .catch((err) => {
-            showAlert("❌ Request failed: " + err.message);
-          });
-      }
-
-      // ✅ Stop all tasks
-      function stopTasks() {
-        console.log("▶️ [API CALL] /stop");
-        fetch("/stop")
-          .then((r) => r.json().catch(() => ({})))
-          .then((json) => {
-            console.log("📥 [API RESPONSE] stop", json);
-            showAlert(json.message || "(no message)");
-          })
-          .catch((err) => {
-            showAlert("❌ Stop request failed: " + err.message);
-          });
-      }
-
-      // ✅ /status → 실행 중 태스크 반영
-      let lastRunning = "";
-
-      function fetchStatus() {
-        fetch("/status")
-          .then((r) => r.json().catch(() => r.text())) // JSON 실패 시 문자열로
-          .then((data) => {
-            // 만약 문자열이면 다시 JSON 추출
-            if (typeof data === "string") {
-              try {
-                // "✅ status → {...}" 형식이라면 {...} 부분만 잘라내기
-                const jsonPart = data.substring(data.indexOf("{"));
-                data = JSON.parse(jsonPart);
-              } catch (e) {
-                console.error("❌ JSON parse error:", e, data);
-                data = { running: [] };
-              }
-            }
-
-            console.log("📥 [API RESPONSE] parsed:", data);
-
-            const runningTasks = Array.isArray(data.running)
-              ? data.running
-              : [];
-
-            // 상태바
-            statusBar.textContent =
-              runningTasks.length > 0
-                ? "현재 실행 중: " + runningTasks.join(", ")
-                : "현재 실행 중: 없음";
-
-            // 로딩 영역
-            loadings.innerHTML = "";
-            if (runningTasks.length > 0) {
-              runningTasks.forEach((task) => {
-                const div = document.createElement("div");
-                div.textContent = `⏳ [${task}] 실행 중`;
-                div.className = "loading-msg";
-                loadings.appendChild(div);
-              });
-            } else {
-              loadings.innerHTML =
-                "<div>🕒 Loading tasks will be shown here...</div>";
-            }
-          })
-          .catch((err) => console.error("❌ [API ERROR] status", err));
-      }
-
-      setInterval(fetchStatus, 5000);
-
-      // ✅ Helpers
-      function showAlert(message) {
-        const div = document.createElement("div");
-        div.textContent = message;
-        alerts.prepend(div);
-        setTimeout(() => {
-          if (alerts.contains(div)) alerts.removeChild(div);
-        }, 10000);
-      }
-
-      function escapeHtml(s) {
-        const div = document.createElement("div");
-        div.innerText = s || "";
-        return div.innerHTML;
-      }
-    </script>
-  </body>
-</html>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Status</th>
+      <th>Message</th>
+      <th>Time (KST)</th>
+    </tr>
+  </thead>
+  <tbody id="logTableBody"></tbody>
+</table>
+{% endblock %}

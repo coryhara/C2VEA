@@ -1,153 +1,55 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <!-- ✅ socket.io-client 4.x -->
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
-  <meta charset="UTF-8" />
-  <title>PoC Upload</title>
-  <style>
-    body { background:#121212; color:#8de0d6; font-family:'Courier New', monospace; margin:2rem; }
-    h1 { color:#74cfc5; text-shadow:0 0 2px #2d837c; }
-    #controls { margin:1.5rem 0; }
-    button { margin:.3rem; padding:.6rem 1.2rem; background:#1f1f1f; border:1px solid #5aaba2; color:#8de0d6;
-      font-weight:bold; cursor:pointer; border-radius:4px; transition:.2s; }
-    button:hover { background:#2d2d2d; color:#b0fff5; border-color:#8de0d6; }
-    #alerts, #loadings { margin-bottom:1rem; padding:10px; background:#1c1c1c; border-left:4px solid #c77d4c; color:#e2cbb5; }
-    #alerts div, #loadings div { margin-bottom:6px; }
-    .loading-msg { color:#ffd966; font-weight:bold; font-size:16px; animation:pulse 1s infinite; }
-    @keyframes pulse { 0%{opacity:.4} 50%{opacity:1} 100%{opacity:.4} }
+{% extends "base.html" %}
+{% block title %}PoC Upload{% endblock %}
+{% block header %}🧪 PoC Upload{% endblock %}
 
-    /* 폼 스타일 */
-    form { background:#1c1c1c; padding:1.2rem; border-radius:8px; border:1px solid #2a2a2a; max-width:640px; }
-    label { display:inline-block; min-width:160px; color:#99d3cc; }
-    input[type="text"], input[type="url"], input[type="file"] {
-      background:#121212; color:#8de0d6; border:1px solid #2a2a2a; padding:.4rem .6rem; border-radius:4px; width: calc(100% - 170px);
-    }
-    .row { margin:.6rem 0; display:flex; align-items:center; gap:.6rem; }
-    .hint { color:#c9a27a; font-size:.9rem; margin:.2rem 0 1rem; }
-  </style>
-</head>
-<body>
-  <h1>🧪 PoC 업로드</h1>
+{% block content %}
+<div id="controls">
+  <button onclick="window.location.href='/'">← Back to Logs</button>
+  <button onclick="stopTasks()">🛑 Stop</button>
+</div>
 
-  <div id="controls">
-    <button onclick="window.location.href='/'">← Back to Logs</button>
-    <!-- ✅ Stop 버튼 추가 -->
-    <button onclick="stopTasks()">🛑 Stop</button>
+<div id="loadings">⏳ Loading tasks will be shown here...</div>
+<div id="alerts">📢 Notifications will appear here</div>
+
+<form action="/poc" method="POST" enctype="multipart/form-data">
+  <div class="row">
+    <label for="cve_id">CVE ID:</label>
+    <input
+      id="cve_id"
+      type="text"
+      name="cve_id"
+      placeholder="e.g. CVE-2025-12345"
+      required
+    />
   </div>
-
-  <div id="loadings">🕒 Loading tasks will be shown here...</div>
-  <div id="alerts">📢 Notification messages will appear here.</div>
-
-  <form action="/poc" method="POST" enctype="multipart/form-data">
-    <div class="row">
-      <label for="cve_id">CVE ID:</label>
-      <input id="cve_id" type="text" name="cve_id" placeholder="e.g. CVE-2025-12345" required>
-    </div>
-
-    <div class="row">
-      <label for="source_identifier">Source Identifier:</label>
-      <input id="source_identifier" type="text" name="source_identifier" placeholder="e.g. Exploit-DB / PacketStorm / ResearchNote" required>
-    </div>
-
-    <div class="hint">Either provide a URL (will be saved as PDF) or upload a file.</div>
-
-    <div class="row">
-      <label for="poc_url">URL 입력:</label>
-      <input id="poc_url" type="url" name="poc_url" placeholder="https://example.com/poc">
-    </div>
-
-    <div class="row">
-      <label for="poc_file">또는 파일 업로드:</label>
-      <input id="poc_file" type="file" name="poc_file">
-    </div>
-
-    <div class="row" style="justify-content:flex-end;">
-      <button type="submit">저장</button>
-    </div>
-  </form>
-
-  <script>
-    const alerts = document.getElementById("alerts");
-    const loadings = document.getElementById("loadings");
-    const activeTasks = new Set();
-
-    const socket = io("http://localhost:8080", {
-      path: "/socket.io/",
-      transports: ["websocket"]
-    });
-
-    socket.on("connect", () => {
-      console.log("Connected:", socket.id);
-      socket.emit("request_active");
-    });
-
-    socket.on("active", (items) => {
-      if (!Array.isArray(items)) return;
-      for (const it of items) {
-        const task = String(it.label || "").toLowerCase();
-        if (!task) continue;
-        if (!activeTasks.has(task)) {
-          activeTasks.add(task);
-          addLoading(task);
-        }
-      }
-    });
-
-    socket.on("notify", (msg) => {
-      showAlert(msg.message);
-      const lower = (msg.label || "").toLowerCase();
-      if (isFinalMessage(msg.message)) {
-        removeLoading(lower);
-      }
-    });
-
-    function isFinalMessage(message) {
-      const m = String(message || "").toLowerCase();
-      return /\b(done|completed|finished|success(?:ful|fully)?|all tasks complete|backup complete|cve (?:job|sync) complete)\b/.test(m);
-    }
-
-    function showAlert(message) {
-      const div = document.createElement("div");
-      div.textContent = message;
-      if (message.startsWith("✅")) div.style.color = "#90ee90";
-      else if (message.startsWith("❌")) div.style.color = "#f08080";
-      else div.style.color = "#e2cbb5";
-      alerts.prepend(div);
-      setTimeout(() => { if (alerts.contains(div)) alerts.removeChild(div); }, 10000);
-    }
-
-    function addLoading(task) {
-      if (document.getElementById(`loading-${task}`)) return;
-      const div = document.createElement("div");
-      div.textContent = `⏳ Loading... [${task}]`;
-      div.id = `loading-${task}`;
-      div.classList.add("loading-msg");
-      loadings.appendChild(div);
-    }
-
-    function removeLoading(task) {
-      activeTasks.delete(task);
-      const div = document.getElementById(`loading-${task}`);
-      if (div) loadings.removeChild(div);
-    }
-
-    // ✅ Stop 버튼 동작
-    function stopTasks() {
-      fetch("/stop")
-        .then(r => r.json().catch(() => ({})).then(j => ({ ok: r.ok, json: j })))
-        .then(({ ok, json }) => {
-          showAlert((ok ? "✅ " : "❌ ") + (json.message || "(no message)"));
-          if (ok) {
-            for (const task of Array.from(activeTasks)) {
-              removeLoading(task);
-            }
-          }
-        })
-        .catch(err => {
-          showAlert("❌ Stop request failed: " + err.message);
-        });
-    }
-  </script>
-</body>
-</html>
+  <div class="row">
+    <label for="source_identifier">Source Identifier:</label>
+    <input
+      id="source_identifier"
+      type="text"
+      name="source_identifier"
+      placeholder="e.g. Exploit-DB / PacketStorm / ResearchNote"
+      required
+    />
+  </div>
+  <div class="hint">
+    Either provide a URL (will be saved as PDF) or upload a file.
+  </div>
+  <div class="row">
+    <label for="poc_url">PoC URL:</label>
+    <input
+      id="poc_url"
+      type="url"
+      name="poc_url"
+      placeholder="https://example.com/poc"
+    />
+  </div>
+  <div class="row">
+    <label for="poc_file">Upload File:</label>
+    <input id="poc_file" type="file" name="poc_file" />
+  </div>
+  <div class="row" style="justify-content: flex-end">
+    <button type="submit">Save</button>
+  </div>
+</form>
+{% endblock %}
