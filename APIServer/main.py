@@ -1,14 +1,10 @@
 from fastapi import FastAPI
-import os
 import threading
 import pymysql
-from dotenv import load_dotenv
 from research import GitHubPoCCollector
 from parser import CVEParser
 from processor import CVEProcessor
 from backup import DatabaseBackup
-
-load_dotenv()
 
 app = FastAPI()
 run_lock = threading.Lock()
@@ -17,9 +13,9 @@ run_lock = threading.Lock()
 current_processor = None
 current_collector = None
 current_backup = None
-stop_all = False   # ✅ 전체 중단 플래그
+stop_all = False
 
-# DB 설정
+# DB 연결 설정 (환경변수 대신 고정값 or 별도 안전하게 관리)
 DB_CONFIG = {
     "host": os.getenv("DB_HOST"),
     "user": os.getenv("DB_USER"),
@@ -30,14 +26,18 @@ DB_CONFIG = {
     "cursorclass": pymysql.cursors.DictCursor,
 }
 
-# 환경 변수
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-start_year = int(os.getenv("START_YEAR"))
-start_month = int(os.getenv("START_MONTH"))
-request_interval = float(os.getenv("REQUEST_INTERVAL"))
-download_interval = float(os.getenv("DOWNLOAD_INTERVAL"))
-retry_interval = float(os.getenv("RETRY_INTERVAL"))
-max_retries = int(os.getenv("MAX_RETRIES"))
+# =========================
+# DB에서 설정값 불러오기
+# =========================
+def get_config():
+    conn = pymysql.connect(**DB_CONFIG)
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT config_key, config_value FROM app_config")
+            rows = cursor.fetchall()
+            return {row["config_key"]: row["config_value"] for row in rows}
+    finally:
+        conn.close()
 
 # =========================
 # 상태 확인
@@ -60,7 +60,7 @@ def get_status():
 @app.get("/stop")
 def stop_process():
     global current_processor, current_collector, current_backup, stop_all
-    stop_all = True   # ✅ 앞으로 실행될 작업도 전부 스킵
+    stop_all = True
     stopped = []
     if current_processor:
         current_processor.stop()
@@ -82,9 +82,15 @@ def stop_process():
 # =========================
 def run_cve_task():
     global current_processor, stop_all
-    if stop_all:  # ✅ stop 눌렸으면 시작 안 함
+    if stop_all:
         return
-    current_processor = CVEProcessor(start_year=start_year, start_month=start_month, db_config=DB_CONFIG)
+
+    config = get_config()
+    start_year = int(config.get("START_YEAR"))
+    start_month = int(config.get("START_MONTH"))
+    interval = float(config.get("INTTERVAL"))
+
+    current_processor = CVEProcessor(start_year=start_year, start_month=start_month, db_config=DB_CONFIG, interval=INTTERVAL)
     try:
         cve_base_dir = current_processor.get_cve_base_dir()
         cve_parser = CVEParser(DB_CONFIG, json_base_dir_path=cve_base_dir, start_year=start_year)
@@ -101,8 +107,16 @@ def run_github_task():
     global current_collector, stop_all
     if stop_all:
         return
+
+    config = get_config()
+    token = config.get("GITHUB_TOKEN")
+    request_interval = float(config.get("REQUEST_INTERVAL"))
+    download_interval = float(config.get("DOWNLOAD_INTERVAL"))
+    retry_interval = float(config.get("RETRY_INTERVAL"))
+    max_retries = int(config.get("MAX_RETRIES"))
+
     current_collector = GitHubPoCCollector(
-        GITHUB_TOKEN,
+        token,
         DB_CONFIG,
         request_interval=request_interval,
         download_interval=download_interval,
@@ -120,6 +134,7 @@ def run_backup_task():
     global current_backup, stop_all
     if stop_all:
         return
+
     current_backup = DatabaseBackup(DB_CONFIG)
     try:
         if not stop_all:
@@ -141,7 +156,7 @@ def release_lock():
 @app.get("/run-cve")
 def run_cve():
     global stop_all
-    stop_all = False  # ✅ 실행 전 초기화
+    stop_all = False
     if is_busy():
         return {"status": "error", "message": "Another process is running."}
 
@@ -189,7 +204,7 @@ def run_backup():
 @app.get("/run-main")
 def run_main():
     global stop_all
-    stop_all = False  # ✅ 새 실행 시작 시 초기화
+    stop_all = False
 
     if is_busy():
         return {"status": "error", "message": "Another process is running."}

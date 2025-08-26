@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class CVEProcessor:
-    def __init__(self, start_year, start_month, db_config, cve_dir="./cve"):
+    def __init__(self, start_year, start_month, db_config, interval, cve_dir="./cve"):
         self.start_year = start_year
         self.start_month = start_month
         self.cve_dir = cve_dir
@@ -27,14 +27,10 @@ class CVEProcessor:
 
         self.conn = None
         self.cursor = None
-
-        self.interval = float(os.getenv("INTERVAL", 2.0))
-
-        # ✅ stop flag
+        self.interval = interval
         self._stop = False
 
     def stop(self):
-        """외부에서 실행 중단 요청"""
         self._stop = True
         self.log_to_db("INFO", "CVEProcessor stopped by user request.")
 
@@ -69,7 +65,7 @@ class CVEProcessor:
         all_vulnerabilities = []
 
         while True:
-            if self._stop:  # ✅ stop check
+            if self._stop:
                 self.log_to_db("INFO", "Stopped during request loop.")
                 break
 
@@ -101,7 +97,7 @@ class CVEProcessor:
 
         chunk_size = 2000
         for i in range(0, len(vulnerabilities), chunk_size):
-            if self._stop:  # ✅ stop check
+            if self._stop:
                 self.log_to_db("INFO", "Stopped during save_cves.")
                 break
 
@@ -119,7 +115,7 @@ class CVEProcessor:
         month = self.start_month
 
         while (year < self.end_year) or (year == self.end_year and month <= self.end_month):
-            if self._stop:  # ✅ stop check
+            if self._stop:
                 self.log_to_db("INFO", "Processing stopped by user request.")
                 break
 
@@ -144,7 +140,7 @@ class CVEProcessor:
 
     def retry_failed_requests(self, fail_list):
         while fail_list:
-            if self._stop:  # ✅ stop check
+            if self._stop:
                 self.log_to_db("INFO", "Retry loop stopped by user request.")
                 break
 
