@@ -95,22 +95,20 @@ CREATE TABLE
     );
 
 CREATE TABLE
-    NOT EXISTS app_config (
+    IF NOT EXISTS app_config (
         config_key VARCHAR(100) PRIMARY KEY,
         config_value VARCHAR(255) NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     );
 
--- START_YEAR=1999 # 1999 ~ Current year --
--- START_MONTH=1 # 1 ~ Current month --
-INSERT INTO
-    app_config (config_key, config_value)
-VALUES
+-- START_YEAR=1999 # 1999 ~ Current year
+-- START_MONTH=1 # 1 ~ Current month
+INSERT INTO app_config (config_key, config_value) VALUES
     ('GITHUB_TOKEN', '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'),
     ('START_YEAR', '1999'),
     ('START_MONTH', '1'),
     ('REQUEST_INTERVAL', '1.7'),
     ('DOWNLOAD_INTERVAL', '2.0'),
     ('RETRY_INTERVAL', '1.0'),
-    ('INTTERVAL', '10.0')
+    ('INTERVAL', '10.0'),
     ('MAX_RETRIES', '1');

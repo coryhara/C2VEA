@@ -182,3 +182,51 @@ def _dispatch(endpoint: str, label: str):
 
     from . import socketio as _socketio
     _socketio.start_background_task(_task)
+
+@bp.get("/settings")
+def get_settings():
+    """DB에 저장된 설정값을 불러오기"""
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT config_key, config_value FROM app_config")
+        rows = cur.fetchall()
+        settings = {row[0]: row[1] for row in rows}
+        return render_template("settings.html", settings=settings)
+    finally:
+        cur.close()
+        conn.close()
+
+@bp.post("/settings")
+def update_settings():
+    """설정값 수정"""
+    data = request.form.to_dict()
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        for key, value in data.items():
+            cur.execute("""
+                INSERT INTO app_config (config_key, config_value)
+                VALUES (%s, %s)
+                ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)
+            """, (key, value))
+        conn.commit()
+
+        socketio.emit("notify", {
+            "type": "success",
+            "label": "Settings",
+            "message": "✅ Settings updated successfully"
+        })
+        return redirect("/settings")
+
+    except Exception as e:
+        conn.rollback()
+        socketio.emit("notify", {
+            "type": "error",
+            "label": "Settings",
+            "message": f"❌ Failed to update settings: {e}"
+        })
+        return redirect("/settings")
+    finally:
+        cur.close()
+        conn.close()

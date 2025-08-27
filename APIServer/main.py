@@ -5,6 +5,7 @@ from research import GitHubPoCCollector
 from parser import CVEParser
 from processor import CVEProcessor
 from backup import DatabaseBackup
+import os
 
 app = FastAPI()
 run_lock = threading.Lock()
@@ -88,9 +89,9 @@ def run_cve_task():
     config = get_config()
     start_year = int(config.get("START_YEAR"))
     start_month = int(config.get("START_MONTH"))
-    interval = float(config.get("INTTERVAL"))
+    interval = float(config.get("INTERVAL"))
 
-    current_processor = CVEProcessor(start_year=start_year, start_month=start_month, db_config=DB_CONFIG, interval=INTTERVAL)
+    current_processor = CVEProcessor(start_year=start_year, start_month=start_month, db_config=DB_CONFIG, interval=interval)
     try:
         cve_base_dir = current_processor.get_cve_base_dir()
         cve_parser = CVEParser(DB_CONFIG, json_base_dir_path=cve_base_dir, start_year=start_year)

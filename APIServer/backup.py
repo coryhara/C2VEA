@@ -6,8 +6,8 @@ import pymysql
 
 class DatabaseBackup:
     def __init__(self, db_config: dict, backup_dir: str = "backups", dump_path: str = "mariadb-dump"):
-        self.db_host = db_config.get("host", "127.0.0.1")
-        self.db_port = db_config.get("port", 3306)
+        self.db_host = db_config.get("host")
+        self.db_port = db_config.get("port")
         self.db_user = db_config.get("user")
         self.db_password = db_config.get("password")
         self.db_name = db_config.get("database")
