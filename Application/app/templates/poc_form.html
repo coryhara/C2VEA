@@ -8,46 +8,28 @@
   <button onclick="window.location.href='/settings'">⚙️ Settings</button>
 </div>
 
-<div id="loadings">⏳ Loading tasks will be shown here...</div>
-<div id="alerts">📢 Notifications will appear here</div>
-
 <form action="/poc" method="POST" enctype="multipart/form-data">
   <div class="row">
     <label for="cve_id">CVE ID:</label>
-    <input
-      id="cve_id"
-      type="text"
-      name="cve_id"
-      placeholder="e.g. CVE-2025-12345"
-      required
-    />
+    <input id="cve_id" type="text" name="cve_id" placeholder="e.g. CVE-2025-12345" required />
   </div>
+
   <div class="row">
     <label for="source_identifier">Source Identifier:</label>
-    <input
-      id="source_identifier"
-      type="text"
-      name="source_identifier"
-      placeholder="e.g. Exploit-DB / PacketStorm / ResearchNote"
-      required
-    />
+    <input id="source_identifier" type="text" name="source_identifier"
+      placeholder="e.g. Exploit-DB / PacketStorm / ResearchNote" required />
   </div>
-  <div class="hint">
-    Either provide a URL (will be saved as PDF) or upload a file.
-  </div>
+
   <div class="row">
     <label for="poc_url">PoC URL:</label>
-    <input
-      id="poc_url"
-      type="url"
-      name="poc_url"
-      placeholder="https://example.com/poc"
-    />
+    <input id="poc_url" type="url" name="poc_url" placeholder="https://example.com/poc" />
   </div>
+
   <div class="row">
     <label for="poc_file">Upload File:</label>
     <input id="poc_file" type="file" name="poc_file" />
   </div>
+
   <div class="row" style="justify-content: flex-end">
     <button type="submit">Save</button>
   </div>

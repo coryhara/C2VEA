@@ -5,17 +5,8 @@
 {% block content %}
 <div id="controls">
   <button onclick="window.location.href='/poc'">PoC Upload</button>
-  <button onclick="run('run-main')">Run Main (All)</button>
-  <button onclick="run('run-cve')">Run CVE</button>
-  <button onclick="run('run-github')">Run GitHub</button>
-  <button onclick="run('run-backup')">Run Backup</button>
   <button onclick="window.location.href='/settings'">⚙️ Settings</button>
-  <button onclick="stopTasks()">🛑 Stop</button>
 </div>
-
-<div id="statusBar">No active tasks</div>
-<div id="loadings">⏳ Loading tasks will be shown here...</div>
-<div id="alerts">📢 Notifications will appear here</div>
 
 <table>
   <thead>

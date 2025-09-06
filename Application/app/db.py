@@ -5,7 +5,6 @@ from mysql.connector import pooling, errors
 _pool = None
 
 def init_pool(app):
-    """Create a global connection pool with retry/backoff so app doesn't crash if DB isn't ready yet."""
     global _pool
     cfg = app.config
     params = dict(
@@ -22,10 +21,10 @@ def init_pool(app):
         allow_local_infile=False,
         autocommit=True,
         use_pure=True,
-        connection_timeout=5,  # seconds
+        connection_timeout=5,
     )
 
-    for attempt in range(1, 31):  # 최대 30초 재시도
+    for attempt in range(1, 31):
         try:
             _pool = pooling.MySQLConnectionPool(**params)
             app.logger.info("DB pool created (attempt %d)", attempt)
@@ -40,7 +39,6 @@ def init_pool(app):
     raise RuntimeError("DB connection pool init failed after retries")
 
 def get_conn():
-    """Borrow a connection from the pool and ensure it's alive."""
     global _pool
     if _pool is None:
         raise RuntimeError("DB pool not initialized")

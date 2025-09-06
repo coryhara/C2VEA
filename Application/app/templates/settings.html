@@ -7,21 +7,11 @@
   <button onclick="window.location.href='/'">← Back to Logs</button>
 </div>
 
-<div id="loadings">⏳ Loading tasks will be shown here...</div>
-<div id="alerts">📢 Notifications will appear here</div>
-
 <form action="/settings" method="POST">
   {% for key, value in settings.items() %}
   <div class="row">
     <label for="{{ key }}">{{ key }}:</label>
-    <input
-      id="{{ key }}"
-      type="text"
-      name="{{ key }}"
-      value="{{ value }}"
-      placeholder="Enter {{ key }}"
-      required
-    />
+    <input id="{{ key }}" type="text" name="{{ key }}" value="{{ value }}" placeholder="Enter {{ key }}" required />
   </div>
   {% endfor %}
   <div class="row" style="justify-content: flex-end">

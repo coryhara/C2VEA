@@ -2,7 +2,6 @@ from flask import Flask
 from flask_socketio import SocketIO
 from dataclasses import asdict
 from .config import load_config
-from pathlib import Path
 
 socketio = SocketIO(
     cors_allowed_origins=[],

@@ -19,19 +19,19 @@ services:
     networks:
       - mariadb_network
 
-  api-server:
+  daemon:
     build:
-      context: ../APIServer
+      context: ../Daemon
       dockerfile: Dockerfile
       args:
         APP_UID: 1000
         APP_GID: 1000
-    container_name: APIServer
+    container_name: daemon
     depends_on:
       - mariadb
     user: "1000:1000"
-    ports:
-      - "8000:8000"
+    env_file:
+      - ../Daemon/.env
     volumes:
       - ../Data/cve:/app/cve
       - ../Data/poc_sources:/app/poc_sources

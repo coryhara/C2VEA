@@ -1,6 +1,0 @@
-python-dotenv
-requests
-fastapi
-uvicorn
-python-dotenv
-pymysql

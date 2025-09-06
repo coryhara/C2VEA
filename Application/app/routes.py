@@ -6,67 +6,15 @@ import json
 import os
 import pdfkit
 
-from .services import call_fastapi
 from . import socketio
 from .db import get_conn
 
 bp = Blueprint("main", __name__)
 
-# =========================
-# 기본 라우트 (로그 뷰어 UI)
-# =========================
 @bp.get("/")
 def index():
     return render_template("index.html")
 
-# =========================
-# 작업 실행 버튼들
-# =========================
-@bp.get("/run-main")
-def run_main():
-    _dispatch("/run-main", "Main")
-    return jsonify({"status": "started", "label": "Main", "message": "Main request started"}), 202
-
-@bp.get("/run-cve")
-def run_cve():
-    _dispatch("/run-cve", "CVE")
-    return jsonify({"status": "started", "label": "CVE", "message": "CVE request started"}), 202
-
-@bp.get("/run-github")
-def run_github():
-    _dispatch("/run-github", "GitHub")
-    return jsonify({"status": "started", "label": "GitHub", "message": "GitHub request started"}), 202
-
-@bp.get("/run-backup")
-def run_backup():
-    _dispatch("/run-backup", "Backup")
-    return jsonify({"status": "started", "label": "Backup", "message": "Backup request started"}), 202
-
-# =========================
-# Stop 요청
-# =========================
-@bp.get("/stop")
-def stop_task():
-    label = "Stop"
-    app = current_app._get_current_object()
-
-    def _task():
-        with app.app_context():
-            try:
-                msg = call_fastapi("/stop", label.lower())
-            except Exception as e:
-                msg = f"❌ Stop request failed → {e}"
-            finally:
-                socketio.emit("notify", {"type": "notify", "label": label, "message": msg})
-
-    from . import socketio as _socketio
-    _socketio.start_background_task(_task)
-
-    return jsonify({"status": "started", "label": label, "message": "Stop request sent"}), 202
-
-# ==========================================================
-# PoC Insert
-# ==========================================================
 @bp.get("/poc")
 def poc_form():
     return render_template("poc_form.html")
@@ -156,32 +104,6 @@ def poc_upload():
     finally:
         cur.close()
         conn.close()
-
-# =========================
-# Status → FastAPI 위임
-# =========================
-@bp.get("/status")
-def status():
-    msg = call_fastapi("/status", "status")
-    return jsonify(msg)
-
-# =========================
-# 내부: 작업 디스패처 (단순화)
-# =========================
-def _dispatch(endpoint: str, label: str):
-    app = current_app._get_current_object()
-
-    def _task():
-        with app.app_context():
-            try:
-                msg = call_fastapi(endpoint, label.lower())
-            except Exception as e:
-                msg = f"❌ {label} → {e}"
-            finally:
-                socketio.emit("notify", {"type": "notify", "label": label, "message": msg})
-
-    from . import socketio as _socketio
-    _socketio.start_background_task(_task)
 
 @bp.get("/settings")
 def get_settings():
