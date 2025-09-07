@@ -1,0 +1,122 @@
+// 요약 카드
+fetch("/api/cve/summary")
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById("total").textContent = (data.total ?? 0).toLocaleString();
+    document.getElementById("recent").textContent = (data.recent_7d ?? 0).toLocaleString();
+    document.getElementById("avg").textContent = data.avg_score ?? 0;
+  });
+
+// Helper: total/all/null 제거
+function cleanData(data, key) {
+  return data.filter(d => {
+    const val = (d[key] || "").toString().toLowerCase();
+    return val && val !== "total" && val !== "all" && val !== "null";
+  });
+}
+
+// Severity 분포
+fetch("/api/cve/severity")
+  .then(r => r.json())
+  .then(data => {
+    const filtered = cleanData(data, "severity");
+    new Chart(document.getElementById("severityChart"), {
+      type: "pie",
+      data: {
+        labels: filtered.map(d => d.severity),
+        datasets: [{
+          data: filtered.map(d => d.count),
+          backgroundColor: ["#ff4d4d", "#ff944d", "#ffd24d", "#99e699"]
+        }]
+      },
+      options: { maintainAspectRatio: false }
+    });
+  });
+
+// Score 구간별
+fetch("/api/cve/scores")
+  .then(r => r.json())
+  .then(data => {
+    const filtered = cleanData(data, "range_label");
+    new Chart(document.getElementById("scoreChart"), {
+      type: "bar",
+      data: {
+        labels: filtered.map(d => d.range_label),
+        datasets: [{
+          label: "Count",
+          data: filtered.map(d => d.count),
+          backgroundColor: "#74cfc5"
+        }]
+      },
+      options: {
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true } }
+      }
+    });
+  });
+
+// Attack Vector
+fetch("/api/cve/attack-vector")
+  .then(r => r.json())
+  .then(data => {
+    const filtered = cleanData(data, "attack_vector");
+    new Chart(document.getElementById("vectorChart"), {
+      type: "doughnut",
+      data: {
+        labels: filtered.map(d => d.attack_vector),
+        datasets: [{
+          data: filtered.map(d => d.count),
+          backgroundColor: ["#74cfc5", "#ff944d", "#ffd24d", "#99e699"]
+        }]
+      },
+      options: { maintainAspectRatio: false }
+    });
+  });
+
+// Top Tags
+fetch("/api/cve/tags")
+  .then(r => r.json())
+  .then(data => {
+    const filtered = cleanData(data, "tag");
+    new Chart(document.getElementById("tagsChart"), {
+      type: "bar",
+      data: {
+        labels: filtered.map(d => d.tag),
+        datasets: [{
+          label: "Count",
+          data: filtered.map(d => d.count),
+          backgroundColor: "#c77d4c"
+        }]
+      },
+      options: {
+        maintainAspectRatio: false,
+        indexAxis: "y",
+        scales: { x: { beginAtZero: true } }
+      }
+    });
+  });
+
+// 드래그 앤 드롭 (차트 순서 변경 + 저장)
+const grid = document.getElementById("charts-grid");
+
+function applySavedOrder() {
+  const savedOrder = JSON.parse(localStorage.getItem("chartsOrder") || "[]");
+  if (savedOrder.length) {
+    savedOrder.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) grid.appendChild(el);
+    });
+  }
+}
+
+new Sortable(grid, {
+  animation: 150,
+  ghostClass: "dragging",
+  onEnd: () => {
+    const order = [...grid.children].map(card => card.id);
+    localStorage.setItem("chartsOrder", JSON.stringify(order));
+  }
+});
+
+// 페이지 로드 시 순서 복원
+applySavedOrder();

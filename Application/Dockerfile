@@ -46,7 +46,5 @@ USER app
 
 EXPOSE 8080
 
-# Gunicorn 모듈 방식 실행
-CMD ["python", "-m", "gunicorn", "app:create_app()", \
-     "--bind", "0.0.0.0:8080", "--worker-class", "eventlet", \
-     "--workers", "1", "--threads", "1", "--timeout", "120"]
+# run.py 실행 (python -m app.run)
+CMD ["python", "-m", "app.run"]

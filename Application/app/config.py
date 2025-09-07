@@ -1,10 +1,11 @@
 import os
 from dataclasses import dataclass
+from dotenv import load_dotenv
+load_dotenv()
 
 @dataclass
 class Config:
     SECRET_KEY: str
-    API_BASE: str
     DB_HOST: str
     DB_PORT: int
     DB_USER: str
@@ -18,7 +19,6 @@ class Config:
 def load_config() -> Config:
     required_vars = [
         "SECRET_KEY",
-        "API_BASE",
         "DB_HOST",
         "DB_PORT",
         "DB_USER",
@@ -36,7 +36,6 @@ def load_config() -> Config:
 
     return Config(
         SECRET_KEY=os.getenv("SECRET_KEY"),
-        API_BASE=os.getenv("API_BASE"),
         DB_HOST=os.getenv("DB_HOST"),
         DB_PORT=int(os.getenv("DB_PORT")),
         DB_USER=os.getenv("DB_USER"),

@@ -5,6 +5,7 @@ from mysql.connector import pooling, errors
 _pool = None
 
 def init_pool(app):
+    """Flask app 초기화 시 DB 풀 생성"""
     global _pool
     cfg = app.config
     params = dict(
@@ -16,7 +17,7 @@ def init_pool(app):
         user=cfg["DB_USER"],
         password=cfg["DB_PASSWORD"],
         database=cfg["DB_NAME"],
-        charset=cfg["DB_CHARSET"],
+        charset=cfg.get("DB_CHARSET", "utf8mb4"),
         collation="utf8mb4_unicode_ci",
         allow_local_infile=False,
         autocommit=True,
@@ -24,7 +25,7 @@ def init_pool(app):
         connection_timeout=5,
     )
 
-    for attempt in range(1, 31):
+    for attempt in range(1, 30 + 1):
         try:
             _pool = pooling.MySQLConnectionPool(**params)
             app.logger.info("DB pool created (attempt %d)", attempt)
@@ -38,13 +39,19 @@ def init_pool(app):
 
     raise RuntimeError("DB connection pool init failed after retries")
 
+
 def get_conn():
     global _pool
     if _pool is None:
         raise RuntimeError("DB pool not initialized")
+
     conn = _pool.get_connection()
     try:
         conn.ping(reconnect=True, attempts=2, delay=1)
     except Exception:
         conn.reconnect(attempts=2, delay=1)
     return conn
+
+
+def get_cursor(conn):
+    return conn.cursor(dictionary=True)

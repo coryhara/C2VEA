@@ -82,7 +82,7 @@ def run_main():
 
 if __name__ == "__main__":
     # 매일 22:05에 run_main 실행
-    schedule.every().day.at("22:05").do(run_main)
+    schedule.every().day.at("14:11").do(run_main)
 
     print("✅ Scheduler started. Waiting for tasks...")
     while True:

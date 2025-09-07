@@ -1,13 +1,4 @@
 CREATE TABLE
-    IF NOT EXISTS cve_vulnerabilities (
-        cve_id VARCHAR(50) PRIMARY KEY,
-        source_identifier VARCHAR(100),
-        published TIMESTAMP,
-        last_modified TIMESTAMP,
-        vuln_status VARCHAR(50)
-    );
-
-CREATE TABLE
     IF NOT EXISTS cve_descriptions (
         id SERIAL PRIMARY KEY,
         cve_id VARCHAR(50),

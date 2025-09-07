@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}CVE Analytics Dashboard{% endblock %}
+
+{% block head %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+{% endblock %}
+
+{% block header %}🛡️ CVE Analytics Dashboard{% endblock %}
+
+{% block content %}
+    <div id="controls">
+        <button onclick="window.location.href='/'">← Back to Logs</button>
+        <button onclick="window.location.href='/poc'">PoC Upload</button>
+        <button onclick="window.location.href='/settings'">⚙️ Settings</button>
+    </div>
+
+  <!-- 요약 카드 -->
+  <div class="summary" id="summary-cards">
+    <div><h2 id="total">0</h2><p>Total CVEs</p></div>
+    <div><h2 id="recent">0</h2><p>New (7 days)</p></div>
+    <div><h2 id="avg">0</h2><p>Avg CVSS</p></div>
+  </div>
+
+  <!-- 차트 카드 (드래그 가능) -->
+  <div class="grid" id="charts-grid">
+    <div class="card" id="card-severity">
+      <h3>Severity Distribution</h3>
+      <canvas id="severityChart"></canvas>
+    </div>
+    <div class="card" id="card-scores">
+      <h3>CVSS Score Ranges</h3>
+      <canvas id="scoreChart"></canvas>
+    </div>
+    <div class="card" id="card-vector">
+      <h3>Attack Vector</h3>
+      <canvas id="vectorChart"></canvas>
+    </div>
+    <div class="card" id="card-tags">
+      <h3>Top Tags</h3>
+      <canvas id="tagsChart"></canvas>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}
