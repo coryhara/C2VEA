@@ -18,14 +18,23 @@ def create_app():
     raw = app.config["ALLOWED_ORIGINS"]
     allowed = [o.strip() for o in raw.replace(";", ",").split(",") if o.strip()]
     cors = allowed if allowed else None
-
     socketio.init_app(app, cors_allowed_origins=cors)
 
     from .db import init_pool
     init_pool(app)
 
-    from .routes import bp as routes_bp
-    app.register_blueprint(routes_bp)
+    # ✅ 분리된 블루프린트 등록
+    from app.routes.cve_routes import cve_bp
+    from app.routes.poc_routes import poc_bp
+    from app.routes.settings_routes import settings_bp
+    from app.routes.logs_routes import logs_bp
+    from app.routes.index_routes import index_bp
+    
+    app.register_blueprint(index_bp)
+    app.register_blueprint(cve_bp)
+    app.register_blueprint(poc_bp)
+    app.register_blueprint(settings_bp)
+    app.register_blueprint(logs_bp)
 
     from .sockets import register_socket_handlers
     register_socket_handlers(socketio, app)

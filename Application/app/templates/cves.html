@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}CVE List{% endblock %}
+{% block header %}🐞 CVE List{% endblock %}
+
+{% block content %}
+<form id="cveFilterForm" class="filter-form">
+  <!-- 1행: 기본 검색 -->
+<div class="filter-row">
+  <div class="filter-group">
+    <label for="start">Start</label>
+    <input type="date" id="start" name="start">
+  </div>
+  <div class="filter-group">
+    <label for="end">End</label>
+    <input type="date" id="end" name="end">
+  </div>
+</div>
+
+  <!-- 2행: 상세 조건 -->
+  <div class="filter-row">
+    <select name="severity">
+      <option value="">Severity</option>
+      <option>LOW</option>
+      <option>MEDIUM</option>
+      <option>HIGH</option>
+      <option>CRITICAL</option>
+    </select>
+    <input type="number" name="min_score" min="0" max="10" placeholder="CVSS min">
+    <input type="number" name="max_score" min="0" max="10" placeholder="CVSS max">
+    <input type="text" name="tag" placeholder="Tag">
+    <select name="vector">
+      <option value="">Attack Vector</option>
+      <option value="NETWORK">NETWORK</option>
+      <option value="ADJACENT">ADJACENT</option>
+      <option value="LOCAL">LOCAL</option>
+      <option value="PHYSICAL">PHYSICAL</option>
+    </select>
+  </div>
+
+  <!-- 버튼 -->
+  <div class="filter-actions">
+    <button type="submit">Filter</button>
+  </div>
+</form>
+
+<div id="pagination-top"></div>
+
+<table id="cveTable">
+  <thead>
+    <tr>
+      <th><button onclick="setSort('v.cve_id')" id="sort-cve">CVE <span class="sort-icon"></span></button></th>
+      <th><button onclick="setSort('d.description_value')" id="sort-desc">Description <span class="sort-icon"></span></button></th>
+      <th><button onclick="setSort('m.base_score')" id="sort-score">Score <span class="sort-icon"></span></button></th>
+      <th><button onclick="setSort('m.base_severity')" id="sort-sev">Severity <span class="sort-icon"></span></button></th>
+      <th><button onclick="setSort('m.attack_vector')" id="sort-vec">Vector <span class="sort-icon"></span></button></th>
+      <th><button onclick="setSort('tags')" id="sort-tags">Tags <span class="sort-icon"></span></button></th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<div id="pagination-bottom"></div>
+
+<script>
+function escapeHTML(str) {
+  if (!str) return "";
+  return str.replace(/[&<>"']/g, m => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+  })[m]);
+}
+
+let currentPage = 1;
+let currentFilters = {};
+let currentSort = { column: "v.cve_id", order: "DESC" };
+
+function setSort(column) {
+  if (currentSort.column === column) {
+    currentSort.order = currentSort.order === "ASC" ? "DESC" : "ASC";
+  } else {
+    currentSort = { column, order: "ASC" };
+  }
+  updateSortIcons();
+  loadCVE(1, currentFilters);
+}
+
+function updateSortIcons() {
+  document.querySelectorAll("th button").forEach(btn => {
+    btn.classList.remove("active");
+    btn.querySelector(".sort-icon").className = "sort-icon";
+  });
+  const idMap = {
+    "v.cve_id": "sort-cve",
+    "d.description_value": "sort-desc",
+    "m.base_score": "sort-score",
+    "m.base_severity": "sort-sev",
+    "m.attack_vector": "sort-vec",
+    "tags": "sort-tags"
+  };
+  const activeBtn = document.getElementById(idMap[currentSort.column]);
+  if (activeBtn) {
+    activeBtn.classList.add("active");
+    activeBtn.querySelector(".sort-icon").classList.add(currentSort.order.toLowerCase());
+  }
+}
+
+function loadCVE(page=1, filters={}) {
+  currentPage = page;
+  currentFilters = filters;
+  const params = new URLSearchParams({ ...filters, page, sort: currentSort.column, order: currentSort.order });
+  fetch("/api/cves?" + params)
+    .then(r => r.json())
+    .then(data => {
+      const tbody = document.querySelector("#cveTable tbody");
+      tbody.innerHTML = "";
+      data.items.forEach(r => {
+        tbody.innerHTML += `<tr>
+          <td>${escapeHTML(r.cve_id)}</td>
+          <td>${escapeHTML(r.description_value)}</td>
+          <td>${r.base_score ?? ""}</td>
+          <td>${escapeHTML(r.base_severity)}</td>
+          <td>${escapeHTML(r.attack_vector)}</td>
+          <td>${escapeHTML(r.tags)}</td>
+        </tr>`;
+      });
+      renderPagination("pagination-top", data);
+      renderPagination("pagination-bottom", data);
+    });
+}
+
+function renderPagination(elementId, data) {
+  const pagination = document.getElementById(elementId);
+  pagination.innerHTML = "";
+  let start = Math.max(1, data.page - 5);
+  let end = Math.min(data.pages, data.page + 5);
+  if (data.page > 1) pagination.innerHTML += `<button onclick="loadCVE(${data.page-1}, currentFilters)">Prev</button>`;
+  for (let i = start; i <= end; i++) {
+    pagination.innerHTML += `<button onclick="loadCVE(${i}, currentFilters)" ${i===data.page?'style="font-weight:bold;background:#2d2d2d;"':''}>${i}</button>`;
+  }
+  if (data.page < data.pages) pagination.innerHTML += `<button onclick="loadCVE(${data.page+1}, currentFilters)">Next</button>`;
+}
+
+document.getElementById("cveFilterForm").onsubmit = e => {
+  e.preventDefault();
+  const filters = Object.fromEntries(new FormData(e.target));
+  loadCVE(1, filters);
+};
+
+loadCVE(1);
+</script>
+{% endblock %}

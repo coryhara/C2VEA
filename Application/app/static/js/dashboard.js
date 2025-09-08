@@ -1,3 +1,9 @@
+// Chart.js 전역 기본 설정 (모든 차트에 적용)
+Chart.defaults.color = "#ffffff";              // 기본 텍스트 색
+Chart.defaults.font.size = 14;                 // 기본 폰트 크기
+Chart.defaults.font.weight = "bold";           // 기본 폰트 굵기
+Chart.defaults.devicePixelRatio = window.devicePixelRatio || 1; // DPI 맞춤
+
 // 요약 카드
 fetch("/api/cve/summary")
   .then(r => r.json())
@@ -29,7 +35,14 @@ fetch("/api/cve/severity")
           backgroundColor: ["#ff4d4d", "#ff944d", "#ffd24d", "#99e699"]
         }]
       },
-      options: { maintainAspectRatio: false }
+      options: {
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: { color: "#ffffff", font: { size: 14, weight: "bold" } }
+          }
+        }
+      }
     });
   });
 
@@ -50,7 +63,15 @@ fetch("/api/cve/scores")
       },
       options: {
         maintainAspectRatio: false,
-        scales: { y: { beginAtZero: true } }
+        scales: {
+          x: { ticks: { color: "#ffffff", font: { size: 13 } }, grid: { color: "#333" } },
+          y: { ticks: { color: "#ffffff", font: { size: 13 } }, grid: { color: "#333" } }
+        },
+        plugins: {
+          legend: {
+            labels: { color: "#ffffff", font: { size: 14, weight: "bold" } }
+          }
+        }
       }
     });
   });
@@ -69,7 +90,14 @@ fetch("/api/cve/attack-vector")
           backgroundColor: ["#74cfc5", "#ff944d", "#ffd24d", "#99e699"]
         }]
       },
-      options: { maintainAspectRatio: false }
+      options: {
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: { color: "#ffffff", font: { size: 14, weight: "bold" } }
+          }
+        }
+      }
     });
   });
 
@@ -91,7 +119,15 @@ fetch("/api/cve/tags")
       options: {
         maintainAspectRatio: false,
         indexAxis: "y",
-        scales: { x: { beginAtZero: true } }
+        scales: {
+          x: { ticks: { color: "#ffffff", font: { size: 13 } }, grid: { color: "#333" } },
+          y: { ticks: { color: "#ffffff", font: { size: 13 } }, grid: { color: "#333" } }
+        },
+        plugins: {
+          legend: {
+            labels: { color: "#ffffff", font: { size: 14, weight: "bold" } }
+          }
+        }
       }
     });
   });

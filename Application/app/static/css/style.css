@@ -165,12 +165,35 @@ input[type="file"] {
 }
 
 /* 차트 카드 */
+/* 기본: 1440px 이상 → 한 줄에 최대 5개 (18%) */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(45%, 1fr)); /* 비율 기반 */
+  grid-template-columns: repeat(auto-fit, minmax(30%, 1fr));
   gap: 2%;
   margin-top: 2rem;
 }
+
+/* 1440px 이하 → 한 줄에 최대 4개 (20%) */
+@media (max-width: 1440px) {
+  .grid {
+    grid-template-columns: repeat(auto-fit, minmax(45%, 1fr));
+  }
+}
+
+/* 1200px 이하 → 3개 */
+@media (max-width: 1200px) {
+  .grid {
+    grid-template-columns: repeat(auto-fit, minmax(45%, 1fr));
+  }
+}
+
+/* 768px 이하 → 1개 */
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .card {
   background: #1f1f1f;
   padding: 1.2rem;
@@ -221,4 +244,111 @@ input[type="file"] {
   .card { height: auto; }
   .card canvas { max-height: 250px; }
   .summary { grid-template-columns: 1fr; }
+}
+
+/* ====== input/select 공통 스타일 ====== */
+input[type="text"],
+input[type="url"],
+input[type="file"],
+input[type="number"],
+input[type="date"],
+select {
+  background: #121212;
+  color: #e0e0d6;
+  border: 1px solid #5aaba2;
+  padding: 0.6rem 1rem;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: 0.2s;
+}
+input:focus,
+select:focus {
+  border-color: #8de0d6;
+  box-shadow: 0 0 4px rgba(141, 224, 214, 0.6);
+}
+
+/* ====== 테이블 정렬 버튼 ====== */
+th button {
+  background: transparent;
+  border: none;
+  color: #99d3cc;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+th button .sort-icon {
+  font-size: 0.8rem;
+  opacity: 0.5;
+  transition: 0.2s;
+}
+th button.active .sort-icon {
+  opacity: 1;
+  color: #8de0d6;
+}
+th button .sort-icon.asc::after { content: "▲"; }
+th button .sort-icon.desc::after { content: "▼"; }
+
+/* ====== 페이징 바 ====== */
+#pagination-top,
+#pagination-bottom {
+  text-align: center;
+  margin: 1rem 0;
+}
+#pagination-top button,
+#pagination-bottom button {
+  margin: 0 0.2rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+}
+#pagination-top button[style],
+#pagination-bottom button[style] {
+  border: 1px solid #8de0d6;
+}
+
+/* ====== 필터 폼 ====== */
+.filter-form {
+  background: #1f1f1f;
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 1px solid #2a2a2a;
+  margin: 1.5rem auto;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.6);
+
+  display: grid;
+  gap: 1rem;
+}
+
+/* 각 행을 균등 분배 */
+.filter-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  align-items: center;
+}
+
+/* label 위로 올리기 */
+.filter-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.filter-group label {
+  font-size: 0.8rem;
+  color: #99d3cc;
+  margin-bottom: 0.3rem;
+}
+
+.filter-form input,
+.filter-form select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 버튼은 오른쪽 정렬 */
+.filter-actions {
+  display: flex;
+  justify-content: flex-end;
 }
