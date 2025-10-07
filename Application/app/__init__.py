@@ -23,6 +23,10 @@ def create_app():
     from .db import init_pool
     init_pool(app)
 
+    @app.context_processor
+    def inject_global_config():
+        return dict(ALLOWED_ORIGINS=app.config.get("ALLOWED_ORIGINS", []))
+
     # ✅ 분리된 블루프린트 등록
     from app.routes.cve_routes import cve_bp
     from app.routes.poc_routes import poc_bp

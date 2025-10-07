@@ -25,7 +25,7 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/logs.js') }}"></script>
 <script>
-  const socket = io("http://localhost:8080", {
+  const socket = io("{{ ALLOWED_ORIGINS }}", {
     path: "/socket.io/",
     transports: ["websocket"],
   });

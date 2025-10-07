@@ -97,11 +97,20 @@ CREATE TABLE IF NOT EXISTS app_config (
 -- START_MONTH=1 # 1 ~ Current month
 INSERT INTO app_config (config_key, config_value)
 VALUES
-    ('GITHUB_TOKEN','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'),
+    ('GITHUB_TOKEN','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'),
     ('START_YEAR','1999'),
     ('START_MONTH','1'),
     ('REQUEST_INTERVAL','1.7'),
     ('DOWNLOAD_INTERVAL','2.0'),
     ('RETRY_INTERVAL','1.0'),
     ('INTERVAL','10.0'),
-    ('MAX_RETRIES','1');
+    ('MAX_RETRIES','1'),
+    ('SCHEDULE_TIME','02:15');
+
+CREATE TABLE task_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    task_name VARCHAR(100),
+    status VARCHAR(20),
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMP NULL
+);
