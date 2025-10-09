@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, jsonify
+from flask import Blueprint, render_template, request, redirect, jsonify, send_file, abort
 from werkzeug.utils import secure_filename
 from pathlib import Path
 from datetime import datetime
@@ -9,13 +9,21 @@ from app.db import get_conn, get_cursor
 
 poc_bp = Blueprint("poc", __name__)
 
+# =========================
+# 페이지 라우트
+# =========================
 @poc_bp.get("/pocs")
 def poc_page():
     return render_template("pocs.html")   # ✅ PoC 리스트 페이지
 
+
+# =========================
+# PoC 업로드
+# =========================
 @poc_bp.get("/poc/upload")
 def poc_form():
     return render_template("poc_form.html")
+
 
 @poc_bp.post("/poc/upload")
 def poc_upload():
@@ -87,6 +95,48 @@ def poc_upload():
             cur.close()
         conn.close()
 
+
+# =========================
+# 다운로드 기능 추가
+# =========================
+@poc_bp.get("/poc/download/<int:poc_id>")
+def poc_download(poc_id):
+    conn = get_conn()
+    with get_cursor(conn) as cur:
+        cur.execute("SELECT downloaded_files FROM cve_poc_sources WHERE id=%s", (poc_id,))
+        row = cur.fetchone()
+    conn.close()
+
+    if not row:
+        return jsonify({"error": "PoC not found"}), 404
+
+    try:
+        files_data = json.loads(row["downloaded_files"] or "[]")
+        if not files_data:
+            return jsonify({"error": "No files found"}), 404
+
+        first_item = files_data[0]
+        if isinstance(first_item, dict):
+            file_path = first_item.get("path") or list(first_item.values())[0]
+        else:
+            file_path = first_item
+
+        # ✅ 절대 경로 보정
+        if not os.path.isabs(file_path):
+            base_dir = os.getenv("POC_SAVE_DIR", "/app/poc_sources")  # 실제 파일 저장 루트
+            file_path = os.path.join(base_dir, os.path.relpath(file_path, "./poc_sources"))
+
+        if not os.path.exists(file_path):
+            return jsonify({"error": f"File not found on server: {file_path}"}), 404
+
+        return send_file(file_path, as_attachment=True)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# =========================
+# PoC 리스트 API
+# =========================
 @poc_bp.get("/api/pocs")
 def api_pocs():
     args = request.args
@@ -112,7 +162,12 @@ def api_pocs():
     if conditions:
         base_query += " AND " + " AND ".join(conditions)
 
-    data_query = f"SELECT id, cve_id, source_identifier, url, created_at {base_query}"
+    # ✅ downloaded_files 컬럼 추가
+    data_query = f"""
+        SELECT id, cve_id, source_identifier, url, created_at, downloaded_files
+        {base_query}
+    """
+
     sort = args.get("sort", "created_at")
     order = args.get("order", "DESC").upper()
     if sort not in ["id", "cve_id", "source_identifier", "url", "created_at"]:
@@ -132,6 +187,13 @@ def api_pocs():
         cur.execute(count_query, params)
         total = cur.fetchone()["total"]
 
+    # ✅ downloaded_files를 JSON 문자열로 안전하게 직렬화
+    for r in rows:
+        if isinstance(r.get("downloaded_files"), (list, dict)):
+            r["downloaded_files"] = json.dumps(r["downloaded_files"])
+        elif r.get("downloaded_files") is None:
+            r["downloaded_files"] = "[]"
+
     return jsonify({
         "page": page,
         "size": size,
@@ -140,6 +202,10 @@ def api_pocs():
         "items": rows
     })
 
+
+# =========================
+# 소스 통계
+# =========================
 @poc_bp.get("/api/cve/poc-sources")
 def cve_poc_sources():
     conn = get_conn()
@@ -153,6 +219,7 @@ def cve_poc_sources():
         rows = cur.fetchall()
     conn.close()
     return jsonify(rows)
+
 
 def _notify(type_: str, label: str, message: str):
     socketio.emit("notify", {"type": type_, "label": label, "message": message})

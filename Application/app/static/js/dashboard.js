@@ -132,6 +132,30 @@ fetch("/api/cve/tags")
     });
   });
 
+  // PoC 존재 여부 통계
+fetch("/api/cve/poc-stats")
+  .then(r => r.json())
+  .then(data => {
+    new Chart(document.getElementById("pocChart"), {
+      type: "pie",
+      data: {
+        labels: ["With PoC", "Without PoC"],
+        datasets: [{
+          data: [data.poc_count, data.no_poc_count],
+          backgroundColor: ["#36A2EB", "#FF6384"]
+        }]
+      },
+      options: {
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: { color: "#ffffff", font: { size: 14, weight: "bold" } }
+          }
+        }
+      }
+    });
+  });
+
 // 드래그 앤 드롭 (차트 순서 변경 + 저장)
 const grid = document.getElementById("charts-grid");
 

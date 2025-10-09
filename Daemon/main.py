@@ -39,8 +39,8 @@ def get_config():
             conn.close()
 
 def run_cve_task(config):
-    start_year = int(config.get("START_YEAR"))
-    start_month = int(config.get("START_MONTH"))
+    start_year = int(config.get("MAIN_START_YEAR"))
+    start_month = int(config.get("MAIN_START_MONTH"))
     interval = float(config.get("INTERVAL"))
 
     processor = CVEProcessor(
@@ -66,6 +66,8 @@ def run_github_task(config):
     collector = GitHubPoCCollector(
         token,
         DB_CONFIG,
+        start_year=int(config.get("RESEARCH_START_YEAR")),
+        start_month=int(config.get("RESEARCH_START_MONTH")),
         request_interval=request_interval,
         download_interval=download_interval,
         retry_interval=retry_interval,

@@ -3,6 +3,13 @@
 {% block header %}🐞 CVE List{% endblock %}
 
 {% block content %}
+<div id="controls">
+  <button onclick="window.location.href='/'">← Back to Logs</button>
+  <button onclick="window.location.href='/pocs'">☄️ PoC List</button>
+  <button onclick="window.location.href='/dashboard'">🛡️ CVE Analytics Dashboard</button>
+  <button onclick="window.location.href='/settings'">⚙️ Settings</button>
+</div>
+
 <form id="cveFilterForm" class="filter-form">
   <!-- 1행: 기본 검색 -->
 <div class="filter-row">

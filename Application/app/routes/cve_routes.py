@@ -213,3 +213,33 @@ def cve_tags():
         rows = cur.fetchall()
     conn.close()
     return jsonify(rows)
+
+
+@cve_bp.get("/api/cve/poc-stats")
+def cve_poc_stats():
+    conn = get_conn()
+    with get_cursor(conn) as cur:
+        # PoC가 존재하는 CVE 수
+        cur.execute("""
+            SELECT COUNT(DISTINCT p.cve_id) AS poc_count
+            FROM cve_poc_sources p
+            INNER JOIN cve_vulnerabilities v ON v.cve_id = p.cve_id
+        """)
+        poc_count = cur.fetchone()["poc_count"]
+
+        # PoC가 존재하지 않는 CVE 수
+        cur.execute("""
+            SELECT COUNT(DISTINCT v.cve_id) AS no_poc_count
+            FROM cve_vulnerabilities v
+            LEFT JOIN cve_poc_sources p ON v.cve_id = p.cve_id
+            WHERE p.cve_id IS NULL
+        """)
+        no_poc_count = cur.fetchone()["no_poc_count"]
+
+    conn.close()
+
+    return jsonify({
+        "poc_count": poc_count,
+        "no_poc_count": no_poc_count,
+        "total": poc_count + no_poc_count
+    })

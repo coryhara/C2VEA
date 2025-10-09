@@ -10,11 +10,12 @@
 {% block header %}🛡️ CVE Analytics Dashboard{% endblock %}
 
 {% block content %}
-    <div id="controls">
-        <button onclick="window.location.href='/'">← Back to Logs</button>
-        <button onclick="window.location.href='/poc/upload'">PoC Upload</button>
-        <button onclick="window.location.href='/settings'">⚙️ Settings</button>
-    </div>
+  <div id="controls">
+    <button onclick="window.location.href='/'">← Back to Logs</button>
+    <button onclick="window.location.href='/cves'">🐞 CVE List</button>
+    <button onclick="window.location.href='/pocs'">☄️ PoC List</button>
+    <button onclick="window.location.href='/settings'">⚙️ Settings</button>
+  </div>
 
   <!-- 요약 카드 -->
   <div class="summary" id="summary-cards">
@@ -40,6 +41,10 @@
     <div class="card" id="card-tags">
       <h3>Top Tags</h3>
       <canvas id="tagsChart"></canvas>
+    </div>
+    <div class="card" id="card-poc">
+      <h3>PoC Existence</h3>
+      <canvas id="pocChart"></canvas>
     </div>
   </div>
 {% endblock %}
