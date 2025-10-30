@@ -23,26 +23,30 @@
   </div>
 </div>
 
-  <!-- 2행: 상세 조건 -->
-  <div class="filter-row">
-    <select name="severity">
-      <option value="">Severity</option>
-      <option>LOW</option>
-      <option>MEDIUM</option>
-      <option>HIGH</option>
-      <option>CRITICAL</option>
-    </select>
-    <input type="number" name="min_score" min="0" max="10" placeholder="CVSS min">
-    <input type="number" name="max_score" min="0" max="10" placeholder="CVSS max">
-    <input type="text" name="tag" placeholder="Tag">
-    <select name="vector">
-      <option value="">Attack Vector</option>
-      <option value="NETWORK">NETWORK</option>
-      <option value="ADJACENT">ADJACENT</option>
-      <option value="LOCAL">LOCAL</option>
-      <option value="PHYSICAL">PHYSICAL</option>
-    </select>
-  </div>
+<!-- 2행: 상세 조건 -->
+<div class="filter-row">
+  <select name="severity">
+    <option value="">Severity</option>
+    <option>LOW</option>
+    <option>MEDIUM</option>
+    <option>HIGH</option>
+    <option>CRITICAL</option>
+  </select>
+  <input type="number" name="min_score" min="0" max="10" placeholder="CVSS min">
+  <input type="number" name="max_score" min="0" max="10" placeholder="CVSS max">
+  <input type="text" name="tag" placeholder="Tag">
+  <select name="vector">
+    <option value="">Attack Vector</option>
+    <option value="NETWORK">NETWORK</option>
+    <option value="ADJACENT">ADJACENT</option>
+    <option value="LOCAL">LOCAL</option>
+    <option value="PHYSICAL">PHYSICAL</option>
+  </select>
+</div>
+
+<div class="filter-row">
+  <input type="text" name="search" placeholder="Search in description...">
+</div>
 
   <!-- 버튼 -->
   <div class="filter-actions">
@@ -75,6 +79,14 @@ function escapeHTML(str) {
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
   })[m]);
 }
+
+// 🔥 색상 매핑 테이블
+const severityColors = {
+  "CRITICAL": "#9E4A4A", // 어두운 붉은기
+  "HIGH": "#B87D3C",     // 따뜻한 갈색빛 주황
+  "MEDIUM": "#9B7E3A",   // 톤다운된 황금빛
+  "LOW": "#6B8E6B"       // 회색
+};
 
 let currentPage = 1;
 let currentFilters = {};
@@ -120,11 +132,13 @@ function loadCVE(page=1, filters={}) {
       const tbody = document.querySelector("#cveTable tbody");
       tbody.innerHTML = "";
       data.items.forEach(r => {
+        const sev = r.base_severity?.toUpperCase?.() || "";
+        const sevColor = severityColors[sev] || "";
         tbody.innerHTML += `<tr>
           <td>${escapeHTML(r.cve_id)}</td>
           <td>${escapeHTML(r.description_value)}</td>
           <td>${r.base_score ?? ""}</td>
-          <td>${escapeHTML(r.base_severity)}</td>
+          <td style="color:${sevColor};font-weight:bold;">${escapeHTML(sev)}</td>
           <td>${escapeHTML(r.attack_vector)}</td>
           <td>${escapeHTML(r.tags)}</td>
         </tr>`;

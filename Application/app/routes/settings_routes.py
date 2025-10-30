@@ -8,7 +8,7 @@ settings_bp = Blueprint("settings", __name__)
 def get_settings():
     conn = get_conn()
     with get_cursor(conn) as cur:
-        cur.execute("SELECT config_key, config_value FROM app_config")
+        cur.execute("SELECT config_key, config_value FROM app_config ORDER BY id ASC")
         rows = cur.fetchall()
         settings = {row["config_key"]: row["config_value"] for row in rows}
     conn.close()

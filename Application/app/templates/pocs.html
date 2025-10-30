@@ -111,7 +111,7 @@ function loadPOC(page=1, filters={}) {
             <td>${r.id}</td>
             <td>${escapeHTML(r.cve_id)}</td>
             <td>${escapeHTML(r.source_identifier)}</td>
-            <td>${r.url ? `<a href="${escapeHTML(r.url)}" target="_blank" class="link-btn">🌐 Link</a>` : ""}</td>
+            <td>${r.url ? `<a href="${escapeHTML(r.url)}" target="_blank" class="link-btn">🌐 ${escapeHTML(r.url)}</a>` : ""}</td>
             <td>${escapeHTML(r.created_at)}</td>
             <td>${downloadLink}</td>
           </tr>`;

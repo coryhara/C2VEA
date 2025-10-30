@@ -26,7 +26,7 @@ def get_config():
     try:
         conn = pymysql.connect(**DB_CONFIG)
         with conn.cursor() as cursor:
-            cursor.execute("SELECT config_key, config_value FROM app_config")
+            cursor.execute("SELECT config_key, config_value FROM app_config ORDER BY id ASC")
             rows = cursor.fetchall()
             return {row["config_key"]: row["config_value"] for row in rows}
     except pymysql.err.OperationalError as e:
@@ -39,8 +39,8 @@ def get_config():
             conn.close()
 
 def run_cve_task(config):
-    start_year = int(config.get("MAIN_START_YEAR"))
-    start_month = int(config.get("MAIN_START_MONTH"))
+    start_year = int(config.get("CVE_START_YEAR"))
+    start_month = int(config.get("CVE_START_MONTH"))
     interval = float(config.get("INTERVAL"))
 
     processor = CVEProcessor(
@@ -72,6 +72,9 @@ def run_github_task(config):
         download_interval=download_interval,
         retry_interval=retry_interval,
         max_retries=max_retries,
+        max_threads=int(config.get("MAX_THREADS")),
+        research_wait_minutes=int(config.get("RESEARCH_WAIT_MINUTES")),
+        rate_limit_threshold=int(config.get("RATE_LIMIT_THRESHOLD")),
     )
     collector.process()
 
@@ -79,51 +82,52 @@ def run_backup_task():
     backup = DatabaseBackup(DB_CONFIG)
     backup.run_backup()
 
-def run_main(config):
-    print(f"[{datetime.now()}] ▶️ Main task started")
+def run_cve(config):
     run_cve_task(config)
+
+def run_research(config):
     run_github_task(config)
     run_backup_task()
-    print(f"[{datetime.now()}] ✅ Main task finished")
 
-def run_main_async(config):
-    thread = threading.Thread(target=run_main, args=(config,))
+def run_research_async(config):
+    thread = threading.Thread(target=run_research, args=(config,))
     thread.start()
 
-def update_schedule_if_needed(prev_time, config):
-    """
-    DB에서 스케줄 시간을 다시 확인하고 변경되었으면 재등록
-    """
-    new_time = str(config.get("SCHEDULE_TIME"))
+def update_schedule_if_needed(prev_research_time, prev_cve_interval, prev_cve_minute, config):
+    new_research_time = str(config.get("RESEARCH_SCHEDULE_TIME"))
+    new_cve_interval = int(config.get("CVE_INTERVAL_HOURS"))
+    new_cve_minute = int(config.get("CVE_MINUTE"))
 
-    if new_time != prev_time:
-        print(f"[{datetime.now()}] 🕒 Schedule time changed: {prev_time} → {new_time}")
-
-        # 기존 스케줄 모두 초기화
+    if (new_research_time != prev_research_time or
+        new_cve_interval != prev_cve_interval or
+        new_cve_minute != prev_cve_minute):
         schedule.clear()
+        schedule.every().day.at(new_research_time).do(run_research_async, config)
+        schedule.every(new_cve_interval).hours.at(f":{new_cve_minute:02d}").do(run_cve, config)
 
-        # 새로운 시간으로 다시 등록
-        schedule.every().day.at(new_time).do(run_main, config)
-        print(f"[{datetime.now()}] ✅ Scheduler updated to run at {new_time}")
+        return new_research_time, new_cve_interval, new_cve_minute
 
-        return new_time
-    return prev_time
+    return prev_research_time, prev_cve_interval, prev_cve_minute
 
 
 if __name__ == "__main__":
     config = get_config()
-    current_schedule_time = str(config.get("SCHEDULE_TIME"))
 
-    schedule.every().day.at(current_schedule_time).do(run_main_async, config)
-    print(f"✅ Scheduler started. Current run time: {current_schedule_time}")
+    current_research_time = str(config.get("RESEARCH_SCHEDULE_TIME"))
+    current_cve_interval = int(config.get("CVE_INTERVAL_HOURS"))
+    current_cve_minute = int(config.get("CVE_MINUTE"))
+
+    schedule.every().day.at(current_research_time).do(run_research_async, config)
+    schedule.every(current_cve_interval).hours.at(f":{current_cve_minute:02d}").do(run_cve, config)
 
     while True:
         schedule.run_pending()
 
-        # 1분마다 설정 갱신 확인
         if datetime.now().second == 0:
             new_config = get_config()
-            current_schedule_time = update_schedule_if_needed(current_schedule_time, new_config)
+            current_research_time, current_cve_interval, current_cve_minute = update_schedule_if_needed(
+                current_research_time, current_cve_interval, current_cve_minute, new_config
+            )
             config = new_config
 
         time.sleep(1)

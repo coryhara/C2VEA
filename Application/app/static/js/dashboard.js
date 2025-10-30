@@ -32,7 +32,7 @@ fetch("/api/cve/severity")
         labels: filtered.map(d => d.severity),
         datasets: [{
           data: filtered.map(d => d.count),
-          backgroundColor: ["#ff4d4d", "#ff944d", "#ffd24d", "#99e699"]
+          backgroundColor: ["#a5a5a5ff", "#ff4d4d", "#ff944d", "#ffd24d", "#99e699"]
         }]
       },
       options: {
@@ -87,7 +87,7 @@ fetch("/api/cve/attack-vector")
         labels: filtered.map(d => d.attack_vector),
         datasets: [{
           data: filtered.map(d => d.count),
-          backgroundColor: ["#74cfc5", "#ff944d", "#ffd24d", "#99e699"]
+          backgroundColor: ["#ff4d4d", "#74cfc5", "#ff944d", "#ffd24d", "#99e699"]
         }]
       },
       options: {
