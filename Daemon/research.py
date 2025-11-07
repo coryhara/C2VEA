@@ -1,8 +1,8 @@
-import os, time, json, zipfile, requests, pymysql, re, hashlib
-from io import BytesIO
+import os, time, json, re, hashlib, requests, pymysql, threading
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pymysql.cursors import DictCursor
+
 
 class GitHubPoCCollector:
     def __init__(self, github_token, db_config, start_year=1999, start_month=1, base_dir="./poc_sources",
@@ -28,6 +28,12 @@ class GitHubPoCCollector:
         self.research_wait_minutes = research_wait_minutes
         self.rate_limit_threshold = rate_limit_threshold
 
+        # ✅ Rate limit 관리용 공유 변수
+        self.rate_limit_lock = threading.Lock()
+        self.remaining = 5000
+        self.limit = 5000
+        self.reset_at = None
+
     # =========================
     # Logging
     # =========================
@@ -46,48 +52,37 @@ class GitHubPoCCollector:
                 pass
 
     # =========================
-    # DB에서 CVE 목록 가져오기
+    # Rate Limit 사전 확인
     # =========================
-    def get_recent_cves(self):
-        try:
-            with pymysql.connect(**self.db_config) as conn, conn.cursor(DictCursor) as cur:
-                cur.execute(f"""
-                    SELECT DISTINCT cve_id 
-                    FROM cve_vulnerabilities 
-                    WHERE published >= '{self.start_year}-{self.start_month:02d}-01';
-                """)
-                rows = [r["cve_id"] for r in cur.fetchall()]
-            self.log("SUCCESS", f"Fetched {len(rows)} CVEs from DB")
-            return rows
-        except Exception as e:
-            self.log("FAILURE", f"Fetch CVEs failed: {e}")
-            return []
+    def check_rate_limit(self):
+        with self.rate_limit_lock:
+            if self.remaining is not None and self.remaining < self.rate_limit_threshold:
+                msg = (f"Rate limit low: remaining={self.remaining}/{self.limit}, resetAt={self.reset_at}. "
+                       f"Waiting {self.research_wait_minutes} minutes before continuing...")
+                self.log("INFO", msg)
+                print(f"⚠️ {msg}")
+                time.sleep(self.research_wait_minutes * 60)
 
     # =========================
-    # GraphQL 요청 + Rate Limit 관리
+    # GraphQL 요청
     # =========================
     def graphql_request(self, query, variables=None):
         for attempt in range(1, self.max_retries + 1):
             try:
                 res = requests.post(self.graphql_url, headers=self.headers,
-                                    json={"query": query, "variables": variables or {}}, timeout=20)
+                                    json={"query": query, "variables": variables or {}}, timeout=30)
                 if res.status_code == 200:
                     data = res.json()
                     rate_limit = data.get("data", {}).get("rateLimit", {})
-                    remaining = rate_limit.get("remaining", None)
-                    limit = rate_limit.get("limit", None)
-                    reset_at = rate_limit.get("resetAt", None)
-                    if remaining is not None and remaining < self.rate_limit_threshold:
-                        msg = (f"Rate limit low: remaining={remaining}/{limit}, resetAt={reset_at}. "
-                               f"Waiting {self.research_wait_minutes} minutes.")
-                        self.log("INFO", msg)
-                        print(f"⚠️ {msg}")
-                        time.sleep(self.research_wait_minutes * 60)
+                    with self.rate_limit_lock:
+                        self.remaining = rate_limit.get("remaining", self.remaining)
+                        self.limit = rate_limit.get("limit", self.limit)
+                        self.reset_at = rate_limit.get("resetAt", self.reset_at)
                     return data
                 elif res.status_code == 403 and "rate limit" in res.text.lower():
                     reset_time = int(res.headers.get("X-RateLimit-Reset", time.time() + 60))
                     wait = max(reset_time - int(time.time()), 0)
-                    self.log("INFO", f"Rate limit hit, waiting {wait}s")
+                    self.log("INFO", f"Rate limit hit, waiting {wait}s before retry")
                     time.sleep(wait + 5)
                     continue
                 else:
@@ -98,93 +93,81 @@ class GitHubPoCCollector:
         return None
 
     # =========================
-    # Repo 검색 (with pagination)
+    # GitHub Repository 검색 (GraphQL)
     # =========================
     def search_github_repos(self, cve_id):
         query = """
         query($q: String!, $cursor: String) {
-        search(query: $q, type: REPOSITORY, first: 100, after: $cursor) {
-            repositoryCount
-            pageInfo {
-            hasNextPage
-            endCursor
-            }
-            edges {
-            node {
-                ... on Repository {
-                id
-                databaseId
-                name
-                nameWithOwner
-                description
-                url
-                createdAt
-                updatedAt
-                stargazerCount
-                primaryLanguage { name }
-                owner { login url }
-                defaultBranchRef {
-                    name
-                    target { oid }
+            search(query: $q, type: REPOSITORY, first: 100, after: $cursor) {
+                repositoryCount
+                pageInfo {
+                    hasNextPage
+                    endCursor
                 }
+                edges {
+                    node {
+                        ... on Repository {
+                            id
+                            name
+                            nameWithOwner
+                            url
+                            description
+                            updatedAt
+                            stargazerCount
+                            primaryLanguage { name }
+                            owner { login url }
+                            defaultBranchRef {
+                                name
+                                target { oid }
+                            }
+                        }
+                    }
                 }
             }
+            rateLimit {
+                cost
+                remaining
+                limit
+                resetAt
             }
-        }
-        rateLimit {
-            cost
-            remaining
-            limit
-            resetAt
-        }
         }
         """
+
         repos, cursor = [], None
         while True:
+            # ✅ 사전 rate-limit 확인
+            self.check_rate_limit()
             variables = {"q": f'"{cve_id}" in:name sort:updated-desc', "cursor": cursor}
             data = self.graphql_request(query, variables)
             if not data or "data" not in data:
                 self.log("FAILURE", f"{cve_id}: GraphQL search failed")
-                break
+                return []
+
             search_data = data["data"]["search"]
-            edges = search_data.get("edges", [])
-            for edge in edges:
+            for edge in search_data.get("edges", []):
                 repos.append(edge["node"])
+
             if not search_data.get("pageInfo", {}).get("hasNextPage"):
                 break
             cursor = search_data["pageInfo"]["endCursor"]
             time.sleep(self.request_interval)
+
         self.log("SUCCESS", f"{cve_id}: Found {len(repos)} repos")
         return repos
 
     # =========================
-    # DB 중복 체크 (commit_sha 기반)
-    # =========================
-    def already_downloaded(self, cve_id, url, commit_sha):
-        try:
-            with pymysql.connect(**self.db_config) as conn, conn.cursor(DictCursor) as cur:
-                cur.execute("""
-                    SELECT 1 FROM cve_poc_sources 
-                    WHERE cve_id=%s AND url=%s AND commit_sha=%s LIMIT 1;
-                """, (cve_id, url, commit_sha))
-                return cur.fetchone() is not None
-        except Exception as e:
-            self.log("ERROR", f"Check already_downloaded failed: {e}")
-            return False
-
-    # =========================
-    # ZIP 다운로드
+    # ZIP 파일 다운로드 및 DB 저장
     # =========================
     def download_repo_zip(self, owner, name, branch, dest_dir):
         zip_url = f"https://github.com/{owner}/{name}/archive/refs/heads/{branch}.zip"
         headers = {"Authorization": f"token {self.github_token}"}
-        safe_owner = self._sanitize_name(owner)
-        safe_name = self._sanitize_name(name)
+        safe_owner = re.sub(r'[^A-Za-z0-9._\-]', '_', owner)
+        safe_name = re.sub(r'[^A-Za-z0-9._\-]', '_', name)
         repo_dir = os.path.join(dest_dir, f"{safe_owner}__{safe_name}")
         os.makedirs(repo_dir, exist_ok=True)
         zip_path = os.path.join(repo_dir, f"{safe_name}.zip")
 
-        # ✅ 이미 ZIP 존재 + 동일 SHA256 이면 스킵
+        # ✅ 중복 파일 검사 (SHA256)
         if os.path.exists(zip_path):
             existing_sha = self._compute_file_sha256(zip_path)
             if self._sha_exists_in_db(existing_sha):
@@ -210,6 +193,13 @@ class GitHubPoCCollector:
                 time.sleep(self.retry_interval)
         return []
 
+    def _compute_file_sha256(self, path):
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
     def _sha_exists_in_db(self, sha256):
         try:
             with pymysql.connect(**self.db_config) as conn, conn.cursor() as cur:
@@ -222,35 +212,30 @@ class GitHubPoCCollector:
             self.log("ERROR", f"SHA exists check failed: {e}")
             return False
 
-    def _sanitize_name(self, name: str) -> str:
-        return re.sub(r'[^A-Za-z0-9._\-]', '_', name)
-
-    def _compute_file_sha256(self, path: str) -> str:
-        h = hashlib.sha256()
-        with open(path, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                h.update(chunk)
-        return h.hexdigest()
-
     def insert_poc_info(self, cve_id, url, files, sha):
         try:
             with pymysql.connect(**self.db_config) as conn, conn.cursor() as cur:
                 cur.execute("""INSERT INTO cve_poc_sources
                                (cve_id, source_identifier, url, downloaded_files, commit_sha)
-                               VALUES (%s,%s,%s,%s,%s)""",
+                               VALUES (%s,%s,%s,%s,%s)
+                               ON DUPLICATE KEY UPDATE
+                               downloaded_files=VALUES(downloaded_files),
+                               commit_sha=VALUES(commit_sha)
+                            """,
                             (cve_id, "GitHub", url, json.dumps(files), sha))
                 conn.commit()
         except Exception as e:
             self.log("FAILURE", f"{cve_id} insert_poc_info failed: {e}")
 
     # =========================
-    # 개별 CVE 처리 (Thread)
+    # CVE 단일 처리 (Thread)
     # =========================
     def process_single_cve(self, cve):
         try:
             repos = self.search_github_repos(cve)
             if not repos:
                 return
+
             for repo in repos:
                 owner = repo["owner"]["login"]
                 name = repo["name"]
@@ -260,15 +245,15 @@ class GitHubPoCCollector:
                 if not sha:
                     continue
 
-                # ✅ 동일 repo + commit_sha 존재 시 스킵
+                # ✅ DB에 동일 PoC가 존재하는지 먼저 확인
                 if self.already_downloaded(cve, url, sha):
-                    self.log("INFO", f"{cve}: Skipping already downloaded repo {url}")
-                    continue
+                    self.log("INFO", f"{cve}: Already stored {owner}/{name} ({sha[:10]}...) - skipped")
+                    return  # 이미 수집된 항목은 생략
 
                 cve_dir = os.path.join(self.download_dir, cve.replace("/", "_"))
                 files = self.download_repo_zip(owner, name, branch, cve_dir)
                 if not files:
-                    continue
+                    return
 
                 files_meta = []
                 for path in files:
@@ -286,8 +271,23 @@ class GitHubPoCCollector:
             self.log("ERROR", f"{cve}: Thread processing error: {e}")
 
     # =========================
-    # 메인 멀티스레드 처리
+    # 메인 실행 (ThreadPoolExecutor)
     # =========================
+    def get_recent_cves(self):
+        try:
+            with pymysql.connect(**self.db_config) as conn, conn.cursor(DictCursor) as cur:
+                cur.execute(f"""
+                    SELECT DISTINCT cve_id 
+                    FROM cve_vulnerabilities 
+                    WHERE published >= '{self.start_year}-{self.start_month:02d}-01';
+                """)
+                rows = [r["cve_id"] for r in cur.fetchall()]
+            self.log("SUCCESS", f"Fetched {len(rows)} CVEs from DB")
+            return rows
+        except Exception as e:
+            self.log("FAILURE", f"Fetch CVEs failed: {e}")
+            return []
+
     def process(self):
         cves = self.get_recent_cves()
         self.log("INFO", f"Start processing {len(cves)} CVEs using {self.max_threads} threads")
@@ -299,4 +299,4 @@ class GitHubPoCCollector:
                 try:
                     future.result()
                 except Exception as e:
-                    self.log("ERROR", f"{cve}: Thread crashed with {e}")
+                    self.log("ERROR", f"{cve}: Future crashed with {e}")

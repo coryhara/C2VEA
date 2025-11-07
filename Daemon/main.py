@@ -78,9 +78,14 @@ def run_github_task(config):
     )
     collector.process()
 
-def run_backup_task():
-    backup = DatabaseBackup(DB_CONFIG)
+def run_backup_task(config):
+    backup = DatabaseBackup(config)
     backup.run_backup()
+
+def run_backup(config):
+    today = datetime.date.today()
+    if today.day == 1:
+        run_backup_task(config)
 
 def run_cve(config):
     run_cve_task(config)
@@ -119,6 +124,7 @@ if __name__ == "__main__":
 
     schedule.every().day.at(current_research_time).do(run_research_async, config)
     schedule.every(current_cve_interval).hours.at(f":{current_cve_minute:02d}").do(run_cve, config)
+    schedule.every().day.at("00:00").do(run_backup)
 
     while True:
         schedule.run_pending()

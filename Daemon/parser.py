@@ -3,6 +3,7 @@ import json
 import os
 from datetime import datetime
 
+
 class CVEParser:
     def __init__(self, db_config, json_base_dir_path, start_year):
         self.conn = pymysql.connect(**db_config)
@@ -32,20 +33,6 @@ class CVEParser:
                 pass
 
     # =========================
-    # 데이터 초기화
-    # =========================
-    def delete_all_data(self):
-        tables = [
-            'cve_vulnerabilities', 'cve_descriptions', 'cve_tags',
-            'cvss_metrics', 'cve_weaknesses', 'cve_configurations', 'cve_references'
-        ]
-        self.cursor.execute('SET FOREIGN_KEY_CHECKS = 0')
-        for table in tables:
-            self.cursor.execute(f'TRUNCATE TABLE {table}')
-        self.cursor.execute('SET FOREIGN_KEY_CHECKS = 1')
-        self.log("INFO", "All CVE-related tables truncated.")
-
-    # =========================
     # JSON 로드
     # =========================
     def load_json_data_from_year_dirs(self):
@@ -58,18 +45,27 @@ class CVEParser:
                     if filename.endswith('.json'):
                         file_path = os.path.join(year_dir_path, filename)
                         with open(file_path, 'r', encoding='utf-8') as f:
-                            file_data = json.load(f)
-                            data.append(file_data)
+                            try:
+                                file_data = json.load(f)
+                                data.append(file_data)
+                            except json.JSONDecodeError:
+                                self.log("ERROR", f"Invalid JSON format: {file_path}")
         return data
 
     # =========================
-    # 데이터 삽입 메서드들
+    # 데이터 삽입 (Upsert 방식)
     # =========================
     def insert_cve_vulnerabilities(self, cve):
         self.cursor.execute('''
-            INSERT IGNORE INTO cve_vulnerabilities 
-            (cve_id, source_identifier, published, last_modified, vuln_status)
+            INSERT INTO cve_vulnerabilities (
+                cve_id, source_identifier, published, last_modified, vuln_status
+            )
             VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                source_identifier = VALUES(source_identifier),
+                published = VALUES(published),
+                last_modified = VALUES(last_modified),
+                vuln_status = VALUES(vuln_status)
         ''', (
             cve['id'],
             cve.get('sourceIdentifier', ''),
@@ -83,6 +79,8 @@ class CVEParser:
             self.cursor.execute('''
                 INSERT INTO cve_descriptions (cve_id, description_lang, description_value)
                 VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    description_value = VALUES(description_value)
             ''', (cve['id'], desc.get('lang', ''), desc.get('value', '')))
 
     def insert_cve_tags(self, cve):
@@ -91,6 +89,8 @@ class CVEParser:
                 self.cursor.execute('''
                     INSERT INTO cve_tags (cve_id, source_identifier, tag)
                     VALUES (%s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        source_identifier = VALUES(source_identifier)
                 ''', (cve['id'], tag_entry.get('sourceIdentifier', ''), tag))
 
     def insert_cvss_metrics(self, cve):
@@ -105,6 +105,19 @@ class CVEParser:
                             user_interaction, scope, confidentiality_impact, 
                             integrity_impact, availability_impact
                         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE
+                            version = VALUES(version),
+                            vector_string = VALUES(vector_string),
+                            base_score = VALUES(base_score),
+                            base_severity = VALUES(base_severity),
+                            attack_vector = VALUES(attack_vector),
+                            attack_complexity = VALUES(attack_complexity),
+                            privileges_required = VALUES(privileges_required),
+                            user_interaction = VALUES(user_interaction),
+                            scope = VALUES(scope),
+                            confidentiality_impact = VALUES(confidentiality_impact),
+                            integrity_impact = VALUES(integrity_impact),
+                            availability_impact = VALUES(availability_impact)
                     ''', (
                         cve['id'],
                         cvss.get('version', ''),
@@ -127,6 +140,10 @@ class CVEParser:
                 self.cursor.execute('''
                     INSERT INTO cve_weaknesses (cve_id, source, type, description_lang, description_value)
                     VALUES (%s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        source = VALUES(source),
+                        type = VALUES(type),
+                        description_value = VALUES(description_value)
                 ''', (
                     cve['id'],
                     weakness.get('source', ''),
@@ -137,12 +154,15 @@ class CVEParser:
 
     def insert_cve_configurations(self, cve):
         for config in cve.get('configurations', []):
-            operator = config.get('operator', 'OR') == 'OR'
+            operator = config.get('operator', 'OR')
             for node in config.get('nodes', []):
                 cpe_match = node.get('cpeMatch', [])
                 self.cursor.execute('''
                     INSERT INTO cve_configurations (cve_id, operator, cpe_match)
                     VALUES (%s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        operator = VALUES(operator),
+                        cpe_match = VALUES(cpe_match)
                 ''', (cve['id'], operator, json.dumps(cpe_match)))
 
     def insert_cve_references(self, cve):
@@ -150,6 +170,9 @@ class CVEParser:
             self.cursor.execute('''
                 INSERT INTO cve_references (cve_id, url, source, tags)
                 VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    source = VALUES(source),
+                    tags = VALUES(tags)
             ''', (
                 cve['id'],
                 ref.get('url', ''),
@@ -158,11 +181,10 @@ class CVEParser:
             ))
 
     # =========================
-    # 데이터 처리
+    # 데이터 처리 (전체 Upsert)
     # =========================
     def process_data(self):
         try:
-            self.delete_all_data()
             data = self.load_json_data_from_year_dirs()
             for file_data in data:
                 for item in file_data:
@@ -174,7 +196,8 @@ class CVEParser:
                     self.insert_cve_weaknesses(cve)
                     self.insert_cve_configurations(cve)
                     self.insert_cve_references(cve)
-            self.log("SUCCESS", "CVE data processed successfully.")
+            self.conn.commit()
+            self.log("SUCCESS", "CVE data upserted successfully.")
         except Exception as e:
             self.log("FAILURE", f"CVE data processing failed: {str(e)}")
 

@@ -1,31 +1,33 @@
 CREATE TABLE IF NOT EXISTS cve_vulnerabilities (
     cve_id VARCHAR(50) PRIMARY KEY,
     source_identifier VARCHAR(100),
-    published TIMESTAMP,
-    last_modified TIMESTAMP,
+    published TIMESTAMP NULL,
+    last_modified TIMESTAMP NULL,
     vuln_status VARCHAR(50)
 );
 
 CREATE TABLE IF NOT EXISTS cve_descriptions (
     id SERIAL PRIMARY KEY,
-    cve_id VARCHAR(50),
-    description_lang VARCHAR(20),
+    cve_id VARCHAR(50) NOT NULL,
+    description_lang VARCHAR(20) NOT NULL,
     description_value TEXT,
+    UNIQUE KEY (cve_id, description_lang),
     FOREIGN KEY (cve_id) REFERENCES cve_vulnerabilities (cve_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS cve_tags (
     id SERIAL PRIMARY KEY,
-    cve_id VARCHAR(50),
+    cve_id VARCHAR(50) NOT NULL,
     source_identifier VARCHAR(100),
-    tag VARCHAR(100),
+    tag VARCHAR(100) NOT NULL,
+    UNIQUE KEY (cve_id, tag),
     FOREIGN KEY (cve_id) REFERENCES cve_vulnerabilities (cve_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS cvss_metrics (
     id SERIAL PRIMARY KEY,
-    cve_id VARCHAR(50),
-    version VARCHAR(10),
+    cve_id VARCHAR(50) NOT NULL,
+    version VARCHAR(10) NOT NULL,
     vector_string VARCHAR(500),
     base_score FLOAT,
     base_severity VARCHAR(20),
@@ -37,44 +39,49 @@ CREATE TABLE IF NOT EXISTS cvss_metrics (
     confidentiality_impact VARCHAR(20),
     integrity_impact VARCHAR(20),
     availability_impact VARCHAR(20),
+    UNIQUE KEY (cve_id, version),
     FOREIGN KEY (cve_id) REFERENCES cve_vulnerabilities (cve_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS cve_weaknesses (
     id SERIAL PRIMARY KEY,
-    cve_id VARCHAR(50),
+    cve_id VARCHAR(50) NOT NULL,
     source TEXT,
-    type VARCHAR(100),
-    description_lang VARCHAR(20),
+    type VARCHAR(100) NOT NULL,
+    description_lang VARCHAR(20) NOT NULL,
     description_value TEXT,
+    UNIQUE KEY (cve_id, type, description_lang),
     FOREIGN KEY (cve_id) REFERENCES cve_vulnerabilities (cve_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS cve_configurations (
     id SERIAL PRIMARY KEY,
-    cve_id VARCHAR(50),
-    operator BOOLEAN,
+    cve_id VARCHAR(50) NOT NULL,
+    operator VARCHAR(10) NOT NULL,
     cpe_match JSON,
+    UNIQUE KEY (cve_id, operator),
     FOREIGN KEY (cve_id) REFERENCES cve_vulnerabilities (cve_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS cve_references (
     id SERIAL PRIMARY KEY,
-    cve_id VARCHAR(50),
-    url TEXT,
+    cve_id VARCHAR(50) NOT NULL,
+    url TEXT NOT NULL,
     source TEXT,
     tags JSON,
+    UNIQUE KEY (cve_id, url(255)),
     FOREIGN KEY (cve_id) REFERENCES cve_vulnerabilities (cve_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS cve_poc_sources (
     id SERIAL PRIMARY KEY,
-    cve_id VARCHAR(50),
+    cve_id VARCHAR(50) NOT NULL,
     source_identifier VARCHAR(100),
     url TEXT,
     downloaded_files JSON,
     commit_sha VARCHAR(64) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY (cve_id, url(255)),
     FOREIGN KEY (cve_id) REFERENCES cve_vulnerabilities (cve_id) ON DELETE CASCADE
 );
 
@@ -94,23 +101,26 @@ CREATE TABLE IF NOT EXISTS app_config (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- START_YEAR=1999 # 1999 ~ Current year
--- START_MONTH=1 # 1 ~ Current month
+-- ============================================
+-- 초기 구성 데이터 (환경 설정)
+-- ============================================
 INSERT INTO app_config (config_key, config_value)
 VALUES
-    ('GITHUB_TOKEN','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'),
-    ('CVE_INTERVAL_HOURS','1'),
-    ('CVE_MINUTE','30'),
-    ('CVE_START_YEAR','1999'),
-    ('CVE_START_MONTH','1'),
-    ('REQUEST_INTERVAL','1.7'),
-    ('DOWNLOAD_INTERVAL','2.0'),
-    ('RETRY_INTERVAL','1.0'),
-    ('INTERVAL','10.0'),
-    ('MAX_RETRIES','1'),
-    ('RESEARCH_SCHEDULE_TIME','09:00'),
-    ('RESEARCH_START_YEAR','1999'),
-    ('RESEARCH_START_MONTH','1'),
-    ('MAX_THREADS','5'),
-    ('RESEARCH_WAIT_MINUTES','5'),
-    ('RATE_LIMIT_THRESHOLD','500');
+    ('GITHUB_TOKEN', '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'),
+    ('CVE_INTERVAL_HOURS', '1'),
+    ('CVE_MINUTE', '30'),
+    ('CVE_START_YEAR', '1999'),
+    ('CVE_START_MONTH', '1'),
+    ('REQUEST_INTERVAL', '1.7'),
+    ('DOWNLOAD_INTERVAL', '2.0'),
+    ('RETRY_INTERVAL', '1.0'),
+    ('INTERVAL', '10.0'),
+    ('MAX_RETRIES', '1'),
+    ('RESEARCH_SCHEDULE_TIME', '09:00'),
+    ('RESEARCH_START_YEAR', '1999'),
+    ('RESEARCH_START_MONTH', '1'),
+    ('MAX_THREADS', '5'),
+    ('RESEARCH_WAIT_MINUTES', '10'),
+    ('RATE_LIMIT_THRESHOLD', '500')
+ON DUPLICATE KEY UPDATE
+    config_value = VALUES(config_value);

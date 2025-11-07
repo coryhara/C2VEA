@@ -33,12 +33,14 @@ def create_app():
     from app.routes.settings_routes import settings_bp
     from app.routes.logs_routes import logs_bp
     from app.routes.index_routes import index_bp
+    from app.routes.auth_routes import auth_bp
     
     app.register_blueprint(index_bp)
     app.register_blueprint(cve_bp)
     app.register_blueprint(poc_bp)
     app.register_blueprint(settings_bp)
     app.register_blueprint(logs_bp)
+    app.register_blueprint(auth_bp)
 
     from .sockets import register_socket_handlers
     register_socket_handlers(socketio, app)
