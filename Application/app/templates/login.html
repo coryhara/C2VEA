@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Login{% endblock %}
+{% block header %}🔐 Login{% endblock %}
+
+{% block content %}
+<div id="controls">
+  <button onclick="window.location.href='/'">← Back to Logs</button>
+  <button onclick="window.location.href='/cves'">🐞 CVE List</button>
+  <button onclick="window.location.href='/pocs'">☄️ PoC List</button>
+  <button onclick="window.location.href='/dashboard'">🛡️ CVE Dashboard</button>
+  <button onclick="window.location.href='/settings'">⚙️ Settings</button>
+</div>
+
+<form id="loginForm" class="form" onsubmit="return false;">
+  <div class="row">
+    <label for="id">User ID:</label>
+    <input id="id" name="id" type="text" placeholder="Enter your ID" required />
+  </div>
+
+  <div class="row">
+    <label for="password">Password:</label>
+    <input id="password" name="password" type="password" placeholder="Enter your password" required />
+  </div>
+
+  <div class="row" style="justify-content: space-between; align-items: center;">
+    <div>
+      <a href="/signup">Don’t have an account? Sign up</a>
+    </div>
+    <div>
+      <button id="loginBtn" type="button">Log In</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <p id="result" aria-live="polite"></p>
+  </div>
+</form>
+
+<script>
+document.getElementById("loginBtn").addEventListener("click", async () => {
+  const id = document.getElementById("id").value.trim();
+  const password = document.getElementById("password").value;
+
+  if (!id || !password) {
+    document.getElementById("result").innerText = "Please enter both fields.";
+    return;
+  }
+
+  const res = await fetch("/api/login", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ id, password })
+  });
+
+  const json = await res.json();
+  document.getElementById("result").innerText = json.message || "Login failed.";
+
+  if (json.status === "success")
+    setTimeout(() => window.location.href = "/dashboard", 800);
+});
+</script>
+{% endblock %}

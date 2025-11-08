@@ -1,7 +1,9 @@
+import os
 from flask import Flask
 from flask_socketio import SocketIO
 from dataclasses import asdict
 from .config import load_config
+from .utils.session_helper import current_user
 
 socketio = SocketIO(
     cors_allowed_origins=[],
@@ -11,6 +13,7 @@ socketio = SocketIO(
 
 def create_app():
     app = Flask(__name__, template_folder="templates")
+    app.secret_key = os.urandom(32)
 
     cfg = load_config()
     app.config.update(asdict(cfg))
@@ -26,6 +29,10 @@ def create_app():
     @app.context_processor
     def inject_global_config():
         return dict(ALLOWED_ORIGINS=app.config.get("ALLOWED_ORIGINS", []))
+
+    @app.context_processor
+    def inject_user():
+        return {"current_user": current_user()}
 
     # ✅ 분리된 블루프린트 등록
     from app.routes.cve_routes import cve_bp

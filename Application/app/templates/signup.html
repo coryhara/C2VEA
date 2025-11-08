@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Sign Up{% endblock %}
+{% block header %}📝 Sign Up{% endblock %}
+
+{% block content %}
+<div id="controls">
+  <button onclick="window.location.href='/'">← Back to Logs</button>
+  <button onclick="window.location.href='/cves'">🐞 CVE List</button>
+  <button onclick="window.location.href='/pocs'">☄️ PoC List</button>
+  <button onclick="window.location.href='/dashboard'">🛡️ CVE Dashboard</button>
+  <button onclick="window.location.href='/settings'">⚙️ Settings</button>
+</div>
+
+<form id="signupForm" class="form" onsubmit="return false;">
+  <div class="row">
+    <label for="id">User ID:</label>
+    <input id="id" name="id" type="text" placeholder="Choose a user ID" required />
+  </div>
+
+  <div class="row">
+    <label for="password">Password:</label>
+    <input id="password" name="password" type="password" placeholder="Enter a password" required />
+  </div>
+
+  <div class="row">
+    <label for="name">Full Name:</label>
+    <input id="name" name="name" type="text" placeholder="Your full name" required />
+  </div>
+
+  <div class="row">
+    <label for="nickname">Nickname:</label>
+    <input id="nickname" name="nickname" type="text" placeholder="Display name" required />
+  </div>
+
+  <div class="row">
+    <label for="email">Email:</label>
+    <input id="email" name="email" type="email" placeholder="you@example.com" required />
+  </div>
+
+  <div class="row">
+    <label for="phone">Phone:</label>
+    <input id="phone" name="phone" type="tel" placeholder="+82-10-1234-5678" required />
+  </div>
+
+  <div class="row">
+    <label for="github_token">GitHub Token:</label>
+    <input id="github_token" name="github_token" type="text" placeholder="GitHub personal access token" required />
+  </div>
+
+  <div class="row" style="justify-content: flex-end">
+    <button id="signupBtn" type="button">Create Account</button>
+  </div>
+
+  <div class="row">
+    <p id="result" aria-live="polite"></p>
+  </div>
+</form>
+
+<script>
+document.getElementById("signupBtn").addEventListener("click", async () => {
+  const payload = {
+    id: document.getElementById("id").value.trim(),
+    password: document.getElementById("password").value,
+    name: document.getElementById("name").value.trim(),
+    nickname: document.getElementById("nickname").value.trim(),
+    email: document.getElementById("email").value.trim(),
+    phone: document.getElementById("phone").value.trim(),
+    github_token: document.getElementById("github_token").value.trim()
+  };
+
+  if (Object.values(payload).some(v => !v)) {
+    document.getElementById("result").innerText = "Please fill in all fields.";
+    return;
+  }
+
+  const res = await fetch("/api/signup", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload)
+  });
+
+  const json = await res.json();
+  document.getElementById("result").innerText = json.message || "Error occurred.";
+
+  if (json.status === "success")
+    setTimeout(() => window.location.href = "/login", 1000);
+});
+</script>
+{% endblock %}

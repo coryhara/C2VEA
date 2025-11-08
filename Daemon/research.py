@@ -135,7 +135,6 @@ class GitHubPoCCollector:
 
         repos, cursor = [], None
         while True:
-            # ✅ 사전 rate-limit 확인
             self.check_rate_limit()
             variables = {"q": f'"{cve_id}" in:name sort:updated-desc', "cursor": cursor}
             data = self.graphql_request(query, variables)
@@ -193,6 +192,9 @@ class GitHubPoCCollector:
                 time.sleep(self.retry_interval)
         return []
 
+    # =========================
+    # 중복 검사 관련 유틸
+    # =========================
     def _compute_file_sha256(self, path):
         h = hashlib.sha256()
         with open(path, "rb") as f:
@@ -204,25 +206,66 @@ class GitHubPoCCollector:
         try:
             with pymysql.connect(**self.db_config) as conn, conn.cursor() as cur:
                 cur.execute("""
-                    SELECT 1 FROM cve_poc_sources 
-                    WHERE JSON_SEARCH(downloaded_files, 'one', %s) IS NOT NULL LIMIT 1;
+                    SELECT EXISTS (
+                        SELECT 1 FROM cve_poc_sources 
+                        WHERE JSON_SEARCH(downloaded_files, 'one', %s) IS NOT NULL
+                    );
                 """, (sha256,))
-                return cur.fetchone() is not None
+                return cur.fetchone()[0] == 1
         except Exception as e:
             self.log("ERROR", f"SHA exists check failed: {e}")
             return False
 
+    def already_downloaded(self, cve_id, url, sha):
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                conn = pymysql.connect(**self.db_config)
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT EXISTS(
+                            SELECT 1 FROM cve_poc_sources
+                            WHERE cve_id=%s AND url=%s AND commit_sha=%s
+                        );
+                    """, (cve_id, url, sha))
+                    result = cur.fetchone()
+
+                    # ✅ 튜플 또는 딕셔너리 모두 처리
+                    if isinstance(result, (list, tuple)):
+                        return result[0] == 1
+                    elif isinstance(result, dict):
+                        return list(result.values())[0] == 1
+                    else:
+                        return False
+
+                # OperationalError(0, '') 또는 "server has gone away" 계열은 재시도
+                if isinstance(e, pymysql.err.OperationalError) or "server has gone away" in str(e).lower():
+                    if attempt < self.max_retries:
+                        time.sleep(self.retry_interval)
+                        continue
+                break  # 재시도 불가한 오류이거나 최대 시도 초과 시 중단
+            finally:
+                try:
+                    conn.close()
+                except:
+                    pass
+
+        self.log("ERROR", f"already_downloaded failed permanently after {self.max_retries} retries for {cve_id}")
+        return False
+
+    # =========================
+    # DB Insert
+    # =========================
     def insert_poc_info(self, cve_id, url, files, sha):
         try:
             with pymysql.connect(**self.db_config) as conn, conn.cursor() as cur:
-                cur.execute("""INSERT INTO cve_poc_sources
-                               (cve_id, source_identifier, url, downloaded_files, commit_sha)
-                               VALUES (%s,%s,%s,%s,%s)
-                               ON DUPLICATE KEY UPDATE
-                               downloaded_files=VALUES(downloaded_files),
-                               commit_sha=VALUES(commit_sha)
-                            """,
-                            (cve_id, "GitHub", url, json.dumps(files), sha))
+                cur.execute("""
+                    INSERT INTO cve_poc_sources
+                    (cve_id, source_identifier, url, downloaded_files, commit_sha)
+                    VALUES (%s,%s,%s,%s,%s)
+                    ON DUPLICATE KEY UPDATE
+                    downloaded_files=VALUES(downloaded_files),
+                    commit_sha=VALUES(commit_sha)
+                """, (cve_id, "GitHub", url, json.dumps(files), sha))
                 conn.commit()
         except Exception as e:
             self.log("FAILURE", f"{cve_id} insert_poc_info failed: {e}")
@@ -248,7 +291,7 @@ class GitHubPoCCollector:
                 # ✅ DB에 동일 PoC가 존재하는지 먼저 확인
                 if self.already_downloaded(cve, url, sha):
                     self.log("INFO", f"{cve}: Already stored {owner}/{name} ({sha[:10]}...) - skipped")
-                    return  # 이미 수집된 항목은 생략
+                    return
 
                 cve_dir = os.path.join(self.download_dir, cve.replace("/", "_"))
                 files = self.download_repo_zip(owner, name, branch, cve_dir)

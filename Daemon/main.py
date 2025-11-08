@@ -74,7 +74,7 @@ def run_github_task(config):
         max_retries=max_retries,
         max_threads=int(config.get("RESEARCH_MAX_THREADS")),
         research_wait_minutes=int(config.get("RESEARCH_WAIT_MINUTES")),
-        rate_limit_threshold=int(config.get("RATE_LIMIT_THRESHOLD")),
+        rate_limit_threshold=int(config.get("RESEARCH_RATE_LIMIT_THRESHOLD")),
     )
     collector.process()
 
@@ -92,7 +92,6 @@ def run_cve(config):
 
 def run_research(config):
     run_github_task(config)
-    run_backup_task()
 
 def run_research_async(config):
     thread = threading.Thread(target=run_research, args=(config,))

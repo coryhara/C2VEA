@@ -92,13 +92,24 @@ CREATE TABLE IF NOT EXISTS logs (
     log_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-DROP TABLE IF EXISTS app_config;
-
 CREATE TABLE IF NOT EXISTS app_config (
     id INT AUTO_INCREMENT PRIMARY KEY,
     config_key VARCHAR(100) UNIQUE NOT NULL,
     config_value VARCHAR(255) NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS coharas (
+    id VARCHAR(20) PRIMARY KEY,
+    password VARCHAR(128) NOT NULL,
+    name VARCHAR(1000) NOT NULL,
+    nickname VARCHAR(255) UNIQUE NOT NULL,
+    email VARCHAR(320) UNIQUE NOT NULL,
+    phone VARCHAR(15) UNIQUE NOT NULL,
+    github_token VARCHAR(255) UNIQUE NOT NULL,
+    phone_verified BOOLEAN DEFAULT 0,
+    email_verified BOOLEAN DEFAULT 0,
+    github_verified BOOLEAN DEFAULT 0
 );
 
 -- ============================================
@@ -121,6 +132,6 @@ VALUES
     ('RESEARCH_DOWNLOAD_INTERVAL', '2.0'),
     ('RESEARCH_RETRY_INTERVAL', '1.0'),
     ('RESEARCH_REQUEST_INTERVAL', '1.7'),
-    ('RESEARCH_MAX_RETRIES', '1')
+    ('RESEARCH_MAX_RETRIES', '3')
 ON DUPLICATE KEY UPDATE
     config_value = VALUES(config_value);
