@@ -106,21 +106,21 @@ CREATE TABLE IF NOT EXISTS app_config (
 -- ============================================
 INSERT INTO app_config (config_key, config_value)
 VALUES
-    ('GITHUB_TOKEN', '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'),
-    ('CVE_INTERVAL_HOURS', '1'),
-    ('CVE_MINUTE', '30'),
     ('CVE_START_YEAR', '1999'),
     ('CVE_START_MONTH', '1'),
-    ('REQUEST_INTERVAL', '1.7'),
-    ('DOWNLOAD_INTERVAL', '2.0'),
-    ('RETRY_INTERVAL', '1.0'),
-    ('INTERVAL', '10.0'),
-    ('MAX_RETRIES', '1'),
-    ('RESEARCH_SCHEDULE_TIME', '09:00'),
+    ('CVE_INTERVAL_HOURS', '1'),
+    ('CVE_MINUTE', '30'),
+    ('CVE_INTERVAL', '10.0'),
+    ('RESEARCH_GITHUB_TOKEN', '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'),
     ('RESEARCH_START_YEAR', '1999'),
     ('RESEARCH_START_MONTH', '1'),
-    ('MAX_THREADS', '5'),
+    ('RESEARCH_SCHEDULE_TIME', '09:00'),
+    ('RESEARCH_MAX_THREADS', '5'),
     ('RESEARCH_WAIT_MINUTES', '10'),
-    ('RATE_LIMIT_THRESHOLD', '500')
+    ('RESEARCH_RATE_LIMIT_THRESHOLD', '500'),
+    ('RESEARCH_DOWNLOAD_INTERVAL', '2.0'),
+    ('RESEARCH_RETRY_INTERVAL', '1.0'),
+    ('RESEARCH_REQUEST_INTERVAL', '1.7'),
+    ('RESEARCH_MAX_RETRIES', '1')
 ON DUPLICATE KEY UPDATE
     config_value = VALUES(config_value);

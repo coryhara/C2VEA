@@ -41,7 +41,7 @@ def get_config():
 def run_cve_task(config):
     start_year = int(config.get("CVE_START_YEAR"))
     start_month = int(config.get("CVE_START_MONTH"))
-    interval = float(config.get("INTERVAL"))
+    interval = float(config.get("CVE_INTERVAL"))
 
     processor = CVEProcessor(
         start_year=start_year,
@@ -57,11 +57,11 @@ def run_cve_task(config):
     cve_parser.commit_and_close()
 
 def run_github_task(config):
-    token = config.get("GITHUB_TOKEN")
-    request_interval = float(config.get("REQUEST_INTERVAL"))
-    download_interval = float(config.get("DOWNLOAD_INTERVAL"))
-    retry_interval = float(config.get("RETRY_INTERVAL"))
-    max_retries = int(config.get("MAX_RETRIES"))
+    token = config.get("RESEARCH_GITHUB_TOKEN")
+    request_interval = float(config.get("RESEARCH_REQUEST_INTERVAL"))
+    download_interval = float(config.get("RESEARCH_DOWNLOAD_INTERVAL"))
+    retry_interval = float(config.get("RESEARCH_RETRY_INTERVAL"))
+    max_retries = int(config.get("RESEARCH_MAX_RETRIES"))
 
     collector = GitHubPoCCollector(
         token,
@@ -72,7 +72,7 @@ def run_github_task(config):
         download_interval=download_interval,
         retry_interval=retry_interval,
         max_retries=max_retries,
-        max_threads=int(config.get("MAX_THREADS")),
+        max_threads=int(config.get("RESEARCH_MAX_THREADS")),
         research_wait_minutes=int(config.get("RESEARCH_WAIT_MINUTES")),
         rate_limit_threshold=int(config.get("RATE_LIMIT_THRESHOLD")),
     )
