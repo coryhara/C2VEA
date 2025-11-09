@@ -1,26 +1,46 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <meta charset="UTF-8" />
+    <title>{% block title %}{% endblock %}</title>
+
     <script
       src="https://cdn.socket.io/4.7.5/socket.io.min.js"
       crossorigin="anonymous"
     ></script>
-    <meta charset="UTF-8" />
-    <title>{% block title %}{% endblock %}</title>
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    {% block head %}
-    {% endblock %}
+    {% block head %}{% endblock %}
   </head>
 
   <body>
-    <h1>{% block header %}{% endblock %}</h1>
+    <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <h1>{% block header %}{% endblock %}</h1>
 
-    {% block content %}
-    {% endblock %} 
-    
+      <div id="user-info" style="text-align:right;">
+        {% if session.nickname %}
+          <span style="color:#8de0d6;">👤 {{ session.nickname }}</span>
+          <button id="logoutBtn" style="margin-left:1rem;">Logout</button>
+        {% else %}
+          <button onclick="window.location.href='/login'">Login</button>
+          <button onclick="window.location.href='/signup'">Sign Up</button>
+        {% endif %}
+      </div>
+    </header>
+
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer style="margin-top:2rem; text-align:center; font-size:0.9rem; color:#888;">
+      <p>© 2025 Coharas Security Platform</p>
+    </footer>
+
     {% block scripts %}
     <script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
+
     <script>
+      {% if session.user_id %}
       const socket = io("{{ ALLOWED_ORIGINS }}", {
         path: "/socket.io/",
         transports: ["websocket"],
@@ -34,6 +54,17 @@
       socket.on("notify", (msg) => {
         if (msg && msg.message) showAlert(msg.message);
       });
+      {% endif %}
+
+      const logoutBtn = document.getElementById("logoutBtn");
+      if (logoutBtn) {
+        logoutBtn.addEventListener("click", async () => {
+          const res = await fetch("/api/logout", { method: "POST" });
+          const json = await res.json();
+          alert(json.message || "Logged out.");
+          if (json.status === "success") location.href = "/login";
+        });
+      }
     </script>
     {% endblock %}
   </body>

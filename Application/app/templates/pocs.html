@@ -4,10 +4,13 @@
 
 {% block content %}
 <div id="controls">
-  <button onclick="window.location.href='/'">← Back to Logs</button>
-  <button onclick="window.location.href='/cves'">🐞 CVE List</button>
+  <button onclick="window.location.href='/'">🏠 Home</button>
   <button onclick="window.location.href='/dashboard'">🛡️ CVE Analytics Dashboard</button>
+  <button onclick="window.location.href='/cves'">🐞 CVE List</button>
+  {% if session.admin_permission == 1 %}
+  <button onclick="window.location.href='/logs'">📝 Logs</button>
   <button onclick="window.location.href='/settings'">⚙️ Settings</button>
+  {% endif %}
 </div>
 
 <form id="pocFilterForm" class="filter-form">
@@ -42,9 +45,11 @@
 
 <div id="pagination-bottom"></div>
 
+{% if session.admin_permission == 1 %}
 <div style="margin-top: 10px;">
   <a href="/poc/upload"><button>➕ Add PoC</button></a>
 </div>
+{% endif %}
 
 <script>
 function escapeHTML(str) {

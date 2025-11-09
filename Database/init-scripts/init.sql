@@ -106,7 +106,9 @@ CREATE TABLE IF NOT EXISTS coharas (
     nickname VARCHAR(255) UNIQUE NOT NULL,
     email VARCHAR(320) UNIQUE NOT NULL,
     phone VARCHAR(15) UNIQUE NOT NULL,
-    github_token VARCHAR(255) UNIQUE NOT NULL,
+    github_token VARCHAR(255) NOT NULL,
+    email_token VARCHAR(255) UNIQUE NULL,
+    admin_permission BOOLEAN DEFAULT 0,
     phone_verified BOOLEAN DEFAULT 0,
     email_verified BOOLEAN DEFAULT 0,
     github_verified BOOLEAN DEFAULT 0

@@ -1,0 +1,47 @@
+{% extends "base.html" %} 
+{% block title %}Real-Time Log Viewer{% endblock %} 
+{% block header %}🧪 REAL-TIME LOG VIEWER{% endblock %} 
+
+{% block content %}
+<div id="controls">
+  <button onclick="window.location.href='/'">🏠 Home</button>
+  <button onclick="window.location.href='/dashboard'">🛡️ CVE Analytics Dashboard</button>
+  <button onclick="window.location.href='/cves'">🐞 CVE List</button>
+  <button onclick="window.location.href='/pocs'">☄️ PoC List</button>
+  {% if session.admin_permission == 1 %}
+  <button onclick="window.location.href='/settings'">⚙️ Settings</button>
+  {% endif %}
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Status</th>
+      <th>Message</th>
+      <th>Time (KST)</th>
+    </tr>
+  </thead>
+  <tbody id="logTableBody"></tbody>
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/logs.js') }}"></script>
+<script>
+  const socket = io("{{ ALLOWED_ORIGINS }}", {
+    path: "/socket.io/",
+    transports: ["websocket"],
+  });
+
+  socket.on("connect", () => {
+    console.log("✅ Socket connected:", socket.id);
+    socket.emit("subscribe_logs", { last_id: 0 });
+  });
+
+  socket.on("logs", (rows) => {
+    if (!tableBody) return;
+    for (const log of rows) prependLog(log);
+  });
+</script>
+{% endblock %}

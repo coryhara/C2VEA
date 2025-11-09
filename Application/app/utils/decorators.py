@@ -1,16 +1,61 @@
 from functools import wraps
-from flask import session, redirect, url_for, jsonify, request
+from flask import session, jsonify, redirect, url_for, request
 
-def login_required(template_redirect=True):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            if "user_id" not in session:
-                if request.path.startswith("/api/") or request.is_json:
-                    return jsonify({"status": "error", "message": "Login required"}), 401
-                if template_redirect:
-                    return redirect(url_for("auth.login_page"))
-                return jsonify({"status": "error", "message": "Unauthorized"}), 401
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
+# === 로그인 여부 검사 ===
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if "nickname" not in session:
+            if request.path.startswith("/api/"):
+                return jsonify({"status": "error", "message": "Login required."}), 401
+            return redirect(url_for("index.index"))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+# === 이메일 인증 여부 검사 ===
+def email_verified_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("email_verified"):
+            if request.path.startswith("/api/"):
+                return jsonify({"status": "error", "message": "Email verification required."}), 403
+            return redirect(url_for("index.index"))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+# === GitHub 인증 여부 검사 ===
+def github_verified_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("github_verified"):
+            if request.path.startswith("/api/"):
+                return jsonify({"status": "error", "message": "GitHub verification required."}), 403
+            return redirect(url_for("index.index"))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+# === 본인(전화번호) 인증 여부 검사 ===
+def phone_verified_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("phone_verified"):
+            if request.path.startswith("/api/"):
+                return jsonify({"status": "error", "message": "Phone verification required."}), 403
+            return redirect(url_for("index.index"))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+# === 관리자 권한 검사 ===
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("admin_permission"):
+            if request.path.startswith("/api/"):
+                return jsonify({"status": "error", "message": "Admin permission required."}), 403
+            return redirect(url_for("index.index"))
+        return f(*args, **kwargs)
+    return decorated_function

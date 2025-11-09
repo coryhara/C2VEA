@@ -15,6 +15,8 @@ class Config:
     TIMEZONE: str
     ALLOWED_ORIGINS: str
     POLL_INTERVAL_MS: int
+    SMTP_USER: str
+    SMTP_PASS: str
 
 def load_config() -> Config:
     required_vars = [
@@ -28,6 +30,8 @@ def load_config() -> Config:
         "TIMEZONE",
         "ALLOWED_ORIGINS",
         "POLL_INTERVAL_MS",
+        "SMTP_USER",
+        "SMTP_PASS"
     ]
 
     missing = [var for var in required_vars if not (os.getenv(var) and os.getenv(var).strip())]
@@ -45,4 +49,6 @@ def load_config() -> Config:
         TIMEZONE=os.getenv("TIMEZONE"),
         ALLOWED_ORIGINS=os.getenv("ALLOWED_ORIGINS"),
         POLL_INTERVAL_MS=int(os.getenv("POLL_INTERVAL_MS")),
+        SMTP_USER=os.getenv("SMTP_USER"),
+        SMTP_PASS=os.getenv("SMTP_PASS")
     )

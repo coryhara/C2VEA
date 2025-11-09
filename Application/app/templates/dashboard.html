@@ -11,10 +11,13 @@
 
 {% block content %}
   <div id="controls">
-    <button onclick="window.location.href='/'">← Back to Logs</button>
+    <button onclick="window.location.href='/'">🏠 Home</button>
     <button onclick="window.location.href='/cves'">🐞 CVE List</button>
     <button onclick="window.location.href='/pocs'">☄️ PoC List</button>
+    {% if session.admin_permission == 1 %}
+    <button onclick="window.location.href='/logs'">📝 Logs</button>
     <button onclick="window.location.href='/settings'">⚙️ Settings</button>
+    {% endif %}
   </div>
 
   <!-- 요약 카드 -->

@@ -3,9 +3,16 @@ from werkzeug.utils import secure_filename
 from pathlib import Path
 from datetime import datetime
 import os, json, pdfkit
-
 from app import socketio
 from app.db import get_conn, get_cursor
+from app.utils.decorators import (
+    login_required,
+    email_verified_required,
+    github_verified_required,
+    phone_verified_required,
+    admin_required,
+)
+
 
 poc_bp = Blueprint("poc", __name__)
 
@@ -13,6 +20,8 @@ poc_bp = Blueprint("poc", __name__)
 # 페이지 라우트
 # =========================
 @poc_bp.get("/pocs")
+@login_required
+@email_verified_required
 def poc_page():
     return render_template("pocs.html")   # ✅ PoC 리스트 페이지
 
@@ -21,11 +30,17 @@ def poc_page():
 # PoC 업로드
 # =========================
 @poc_bp.get("/poc/upload")
+@login_required
+@email_verified_required
+@admin_required
 def poc_form():
     return render_template("poc_form.html")
 
 
 @poc_bp.post("/poc/upload")
+@login_required
+@email_verified_required
+@admin_required
 def poc_upload():
     cve_id = (request.form.get("cve_id") or "").strip()
     source_id = (request.form.get("source_identifier") or "").strip()
@@ -100,6 +115,8 @@ def poc_upload():
 # 다운로드 기능 추가
 # =========================
 @poc_bp.get("/poc/download/<int:poc_id>")
+@login_required
+@email_verified_required
 def poc_download(poc_id):
     conn = get_conn()
     with get_cursor(conn) as cur:
@@ -138,6 +155,8 @@ def poc_download(poc_id):
 # PoC 리스트 API
 # =========================
 @poc_bp.get("/api/pocs")
+@login_required
+@email_verified_required
 def api_pocs():
     args = request.args
     page = int(args.get("page", 1))
@@ -207,6 +226,8 @@ def api_pocs():
 # 소스 통계
 # =========================
 @poc_bp.get("/api/cve/poc-sources")
+@login_required
+@email_verified_required
 def cve_poc_sources():
     conn = get_conn()
     with get_cursor(conn) as cur:

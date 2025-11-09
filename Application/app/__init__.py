@@ -3,7 +3,6 @@ from flask import Flask
 from flask_socketio import SocketIO
 from dataclasses import asdict
 from .config import load_config
-from .utils.session_helper import current_user
 
 socketio = SocketIO(
     cors_allowed_origins=[],
@@ -30,11 +29,6 @@ def create_app():
     def inject_global_config():
         return dict(ALLOWED_ORIGINS=app.config.get("ALLOWED_ORIGINS", []))
 
-    @app.context_processor
-    def inject_user():
-        return {"current_user": current_user()}
-
-    # ✅ 분리된 블루프린트 등록
     from app.routes.cve_routes import cve_bp
     from app.routes.poc_routes import poc_bp
     from app.routes.settings_routes import settings_bp

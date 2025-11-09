@@ -1,17 +1,30 @@
 from flask import Blueprint, render_template, request, jsonify
 from app.db import get_conn, get_cursor
+from app.utils.decorators import (
+    login_required,
+    email_verified_required,
+    github_verified_required,
+    phone_verified_required,
+    admin_required,
+)
 
 cve_bp = Blueprint("cve", __name__)
 
 @cve_bp.get("/cves")
+@login_required
+@email_verified_required
 def cve_page():
     return render_template("cves.html")   # ✅ CVE 리스트 페이지
 
 @cve_bp.get("/dashboard")
+@login_required
+@email_verified_required
 def dashboard():
     return render_template("dashboard.html")
 
 @cve_bp.get("/api/cves")
+@login_required
+@email_verified_required
 def api_cves():
     args = request.args
     page = int(args.get("page", 1))
@@ -90,6 +103,8 @@ def api_cves():
     })
 
 @cve_bp.get("/api/cve/summary")
+@login_required
+@email_verified_required
 def cve_summary():
     conn = get_conn()
     with get_cursor(conn) as cur:
@@ -114,6 +129,8 @@ def cve_summary():
 
 
 @cve_bp.get("/api/cve/severity")
+@login_required
+@email_verified_required
 def cve_severity():
     conn = get_conn()
     with get_cursor(conn) as cur:
@@ -129,6 +146,8 @@ def cve_severity():
 
 
 @cve_bp.get("/api/cve/scores")
+@login_required
+@email_verified_required
 def cve_scores():
     conn = get_conn()
     with get_cursor(conn) as cur:
@@ -153,6 +172,8 @@ def cve_scores():
 
 
 @cve_bp.get("/api/cve/attack-vector")
+@login_required
+@email_verified_required
 def cve_attack_vector():
     conn = get_conn()
     with get_cursor(conn) as cur:
@@ -167,6 +188,8 @@ def cve_attack_vector():
 
 
 @cve_bp.get("/api/cve/impact")
+@login_required
+@email_verified_required
 def cve_impact():
     conn = get_conn()
     with get_cursor(conn) as cur:
@@ -200,6 +223,8 @@ def cve_impact():
 
 
 @cve_bp.get("/api/cve/tags")
+@login_required
+@email_verified_required
 def cve_tags():
     conn = get_conn()
     with get_cursor(conn) as cur:
@@ -216,6 +241,8 @@ def cve_tags():
 
 
 @cve_bp.get("/api/cve/poc-stats")
+@login_required
+@email_verified_required
 def cve_poc_stats():
     conn = get_conn()
     with get_cursor(conn) as cur:

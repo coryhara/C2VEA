@@ -1,44 +1,168 @@
-{% extends "base.html" %} 
-{% block title %}Real-Time Log Viewer{% endblock %} 
-{% block header %}🧪 REAL-TIME LOG VIEWER{% endblock %} 
+{% extends "base.html" %}
+{% block title %}Coharas — CVE & PoC Intelligence Platform{% endblock %}
+{% block header %}{% endblock %}
 
 {% block content %}
-<div id="controls">
-  <button onclick="window.location.href='/cves'">🐞 CVE List</button>
-  <button onclick="window.location.href='/pocs'">☄️ PoC List</button>
-  <button onclick="window.location.href='/dashboard'">🛡️ CVE Analytics Dashboard</button>
-  <button onclick="window.location.href='/settings'">⚙️ Settings</button>
-</div>
+<section class="hero fade-in">
+  <h1>Track. Analyze. Respond.</h1>
+  <p>
+    Coharas automatically collects and analyzes global <strong>CVE</strong> data, 
+    maps <strong>public PoCs</strong>, and visualizes emerging threats — 
+    empowering faster, data-driven vulnerability response.
+  </p>
+</section>
 
-<table>
-  <thead>
-    <tr>
-      <th>ID</th>
-      <th>Status</th>
-      <th>Message</th>
-      <th>Time (KST)</th>
-    </tr>
-  </thead>
-  <tbody id="logTableBody"></tbody>
-</table>
+<section class="features">
+  <div class="feature-card slide-up">
+    <h3>⚙️ Automated Ingestion</h3>
+    <p>
+      Collects CVEs and PoCs from NVD, GitHub, and other sources using scheduled collectors.<br>
+      <span class="highlight">Advantage:</span> Always up-to-date with zero manual input.
+    </p>
+  </div>
+
+  <div class="feature-card slide-up-delay">
+    <h3>🚀 PoC Mapping & Intelligence</h3>
+    <p>
+      Detects, hashes, and links exploit sources to CVEs for verification.<br>
+      <span class="highlight">Advantage:</span> Instantly see which vulnerabilities have working PoCs.
+    </p>
+  </div>
+
+  <div class="feature-card slide-up-delay2">
+    <h3>📊 Real-time Dashboard</h3>
+    <p>
+      Aggregates and visualizes CVE metrics, PoC coverage, and trend analytics.<br>
+      <span class="highlight">Advantage:</span> Stay focused on what matters most, in real time.
+    </p>
+  </div>
+</section>
+
+<section class="roadmap slide-up">
+  <h2>🚀 Roadmap</h2>
+  <ul>
+    <li>🔍 Integrate vendor advisories and bug bounty feeds</li>
+    <li>🤖 Add ML-based PoC classification</li>
+    <li>📈 Historical trends & automated risk scoring</li>
+    <li>🔔 Multi-channel alerts (Email, Slack, Webhook)</li>
+  </ul>
+</section>
 {% endblock %}
 
-{% block scripts %}
-<script src="{{ url_for('static', filename='js/logs.js') }}"></script>
-<script>
-  const socket = io("{{ ALLOWED_ORIGINS }}", {
-    path: "/socket.io/",
-    transports: ["websocket"],
-  });
+{% block head %}
+<style>
+/* ====== GLOBAL ====== */
+body {
+  text-align: center;
+  margin: 0;
+  background-color: #0e0e0e;
+  color: #e5e5e5;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+}
 
-  socket.on("connect", () => {
-    console.log("✅ Socket connected:", socket.id);
-    socket.emit("subscribe_logs", { last_id: 0 });
-  });
+/* ====== HERO SECTION ====== */
+.hero {
+  margin: 6rem auto 3rem;
+  max-width: 800px;
+  padding: 0 1rem;
+}
+.hero h1 {
+  font-size: 2.8rem;
+  color: #8de0d6;
+  margin-bottom: 1.2rem;
+}
+.hero p {
+  font-size: 1.1rem;
+  line-height: 1.7;
+  color: #cfcfcf;
+}
 
-  socket.on("logs", (rows) => {
-    if (!tableBody) return;
-    for (const log of rows) prependLog(log);
-  });
-</script>
+/* ====== FEATURE CARDS ====== */
+.features {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2rem;
+  margin: 4rem auto;
+  max-width: 1000px;
+  padding: 0 1rem;
+}
+
+.feature-card {
+  background: linear-gradient(180deg, #1b1b1b, #161616);
+  border-radius: 12px;
+  padding: 2rem;
+  width: 300px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+  text-align: left;
+  transition: all 0.3s ease;
+  border: 1px solid #252525;
+}
+.feature-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+  border-color: #5aaba2;
+}
+.feature-card h3 {
+  text-align: center;
+  color: #74cfc5;
+  margin-bottom: 0.8rem;
+}
+.feature-card p {
+  color: #bcbcbc;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+.highlight {
+  color: #8de0d6;
+  font-weight: bold;
+}
+
+/* ====== ROADMAP ====== */
+.roadmap {
+  margin: 5rem auto 3rem;
+  max-width: 700px;
+  text-align: left;
+  background: #141414;
+  padding: 2rem 2.5rem;
+  border-radius: 14px;
+  border: 1px solid #202020;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.roadmap h2 {
+  text-align: center;
+  color: #8de0d6;
+  margin-bottom: 1rem;
+}
+.roadmap ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.roadmap li {
+  margin: 0.6rem 0;
+  font-size: 1rem;
+  color: #d0d0d0;
+  line-height: 1.6;
+}
+
+/* ====== FOOTER ====== */
+.footer {
+  margin: 4rem 0 2rem;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+/* ====== ANIMATIONS ====== */
+.fade-in { opacity: 0; animation: fadeIn 1.2s ease forwards; }
+.slide-up { opacity: 0; transform: translateY(40px); animation: slideUp 1s ease-out forwards; }
+.slide-up-delay { opacity: 0; transform: translateY(40px); animation: slideUp 1s ease-out 0.3s forwards; }
+.slide-up-delay2 { opacity: 0; transform: translateY(40px); animation: slideUp 1s ease-out 0.6s forwards; }
+
+@keyframes fadeIn { from {opacity: 0;} to {opacity: 1;} }
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+</style>
 {% endblock %}

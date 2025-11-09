@@ -1,10 +1,20 @@
 from flask import Blueprint, render_template, request, redirect
 from app.db import get_conn, get_cursor
 from app import socketio
+from app.utils.decorators import (
+    login_required,
+    email_verified_required,
+    github_verified_required,
+    phone_verified_required,
+    admin_required,
+)
 
 settings_bp = Blueprint("settings", __name__)
 
 @settings_bp.get("/settings")
+@login_required
+@email_verified_required
+@admin_required
 def get_settings():
     conn = get_conn()
     with get_cursor(conn) as cur:
@@ -15,6 +25,9 @@ def get_settings():
     return render_template("settings.html", settings=settings)
 
 @settings_bp.post("/settings")
+@login_required
+@email_verified_required
+@admin_required
 def update_settings():
     conn = get_conn()
     try:
