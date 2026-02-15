@@ -231,7 +231,13 @@ def poc_download(poc_id):
 def api_pocs():
     args = request.args
     page = max(int(args.get("page", 1)), 1)
-    size = 100
+    allowed_sizes = {10, 50, 100, 200}
+    try:
+        size = int(args.get("size", 100))
+    except (TypeError, ValueError):
+        size = 100
+    if size not in allowed_sizes:
+        size = 100
     offset = (page - 1) * size
 
     base_query = "FROM cve_poc_sources WHERE 1=1"

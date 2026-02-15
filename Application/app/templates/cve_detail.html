@@ -1,0 +1,444 @@
+{% extends "base.html" %}
+
+{% block title %}{{ cve_id }} - CVE Detail{% endblock %}
+{% block header %}{{ cve_id }} Detail{% endblock %}
+
+{% block head %}
+  <style>
+    .cve-detail-page {
+      color: #eef6ff;
+    }
+    .cve-detail-page .card {
+      min-height: auto;
+      padding: 0.85rem;
+      border-color: rgba(114, 164, 236, 0.42);
+      background: linear-gradient(180deg, rgba(15, 26, 47, 0.96) 0%, rgba(10, 20, 38, 0.98) 100%);
+    }
+    .cve-detail-page .card h3 {
+      font-size: 1.7rem;
+      color: #f4f9ff;
+      letter-spacing: 0.02em;
+      margin-bottom: 0.5rem;
+    }
+    .cve-detail-page #detail-descriptions h3,
+    .cve-detail-page #detail-cvss h3,
+    .cve-detail-page #detail-weaknesses h3,
+    .cve-detail-page #detail-configurations h3,
+    .cve-detail-page #detail-references h3,
+    .cve-detail-page #detail-pocs h3,
+    .cve-detail-page #detail-tags h3 {
+      font-size: 1.02rem;
+      margin-bottom: 0.55rem;
+      letter-spacing: 0.01em;
+    }
+    .cve-detail-page .card-note {
+      color: #bdd8fb;
+      font-size: 0.9rem;
+      margin-bottom: 0.58rem;
+    }
+    .detail-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.7rem;
+      margin-bottom: 0.8rem;
+      flex-wrap: wrap;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      gap: 0.9rem;
+    }
+    .detail-hero {
+      min-height: auto !important;
+    }
+    .detail-grid .table-wrap table {
+      min-width: 100%;
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+    #detail-cvss .table-wrap table {
+      min-width: 1120px;
+    }
+    #detail-weaknesses .table-wrap table {
+      min-width: 760px;
+    }
+    #detail-references .table-wrap table {
+      min-width: 900px;
+    }
+    #detail-pocs .table-wrap table {
+      min-width: 860px;
+    }
+    .detail-grid .table-wrap th,
+    .detail-grid .table-wrap td {
+      padding: 0.58rem 0.7rem;
+      border-color: rgba(93, 139, 209, 0.34) !important;
+    }
+    .detail-grid .table-wrap th {
+      color: #bfd8f8 !important;
+      font-size: 0.75rem;
+      font-weight: 760;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+      text-transform: uppercase;
+    }
+    .detail-grid .table-wrap td {
+      color: #ebf4ff;
+      font-weight: 560;
+      vertical-align: top;
+    }
+    .detail-grid .table-wrap tbody tr:nth-child(even) td {
+      background: rgba(13, 25, 47, 0.5);
+    }
+    .detail-grid .table-wrap .link-btn {
+      color: #89ebff;
+      font-weight: 700;
+    }
+    .detail-grid .table-wrap .link-btn:hover {
+      color: #baf5ff;
+    }
+    #detail-descriptions {
+      grid-column: span 2;
+    }
+    #detail-cvss {
+      grid-column: span 2;
+    }
+    #detail-references {
+      grid-column: span 2;
+    }
+    @media (max-width: 1200px) {
+      #detail-descriptions,
+      #detail-cvss,
+      #detail-references {
+        grid-column: auto;
+      }
+    }
+    .detail-pill-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-top: 0.4rem;
+    }
+    .detail-pill {
+      border: 1px solid rgba(110, 167, 240, 0.45);
+      background: rgba(24, 41, 74, 0.72);
+      color: #d7ebff;
+      border-radius: 999px;
+      padding: 0.2rem 0.6rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+    .detail-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.55rem;
+      margin-top: 0.55rem;
+    }
+    .detail-meta div {
+      border: 1px solid rgba(108, 160, 235, 0.52);
+      border-radius: 10px;
+      padding: 0.55rem 0.65rem;
+      background: linear-gradient(180deg, rgba(12, 30, 58, 0.86) 0%, rgba(9, 21, 41, 0.88) 100%);
+    }
+    .detail-meta strong {
+      display: block;
+      font-size: 0.77rem;
+      color: #b9d8fd;
+      margin-bottom: 0.2rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .detail-meta span {
+      color: #f2f8ff;
+      font-size: 1.05rem;
+      font-weight: 640;
+    }
+    .detail-list {
+      margin: 0;
+      padding-left: 1.05rem;
+    }
+    .detail-list li {
+      margin: 0.25rem 0;
+      line-height: 1.62;
+      color: #ecf5ff;
+      font-size: 1.02rem;
+    }
+    .detail-list li strong {
+      color: #9fd3ff;
+    }
+    .json-block {
+      margin: 0.4rem 0 0;
+      padding: 0.55rem 0.7rem;
+      border: 1px solid rgba(96, 140, 208, 0.35);
+      border-radius: 10px;
+      background: rgba(8, 18, 35, 0.72);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 0.84rem;
+      color: #d8ebff;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .empty-note {
+      color: #b3d2f6;
+      font-size: 0.95rem;
+      margin: 0.1rem 0 0;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="cve-detail-page">
+    <div class="detail-toolbar">
+      <a class="btn btn-outline" href="{{ return_to }}">Back to CVE List</a>
+      <div class="detail-pill-wrap">
+        <a class="btn btn-ghost" href="https://nvd.nist.gov/vuln/detail/{{ cve_id }}" target="_blank" rel="noopener noreferrer">NVD</a>
+        <a class="btn btn-ghost" href="https://www.cve.org/CVERecord?id={{ cve_id }}" target="_blank" rel="noopener noreferrer">CVE.org</a>
+      </div>
+    </div>
+
+    <section class="card detail-hero">
+      <h3>{{ cve_id }}</h3>
+      <p class="card-note">Detailed record synchronized from NVD-derived datasets.</p>
+      <div class="detail-meta">
+        <div>
+          <strong>Source Identifier</strong>
+          <span>{{ vuln.source_identifier or '-' }}</span>
+        </div>
+        <div>
+          <strong>Status</strong>
+          <span>{{ vuln.vuln_status or '-' }}</span>
+        </div>
+        <div>
+          <strong>EPSS Score</strong>
+          <span>
+            {% if vuln.epss_score is not none %}
+              {{ '%.4f%%'|format((vuln.epss_score or 0) * 100) }}
+            {% else %}
+              -
+            {% endif %}
+          </span>
+        </div>
+        <div>
+          <strong>EPSS Percentile</strong>
+          <span>
+            {% if vuln.epss_percentile is not none %}
+              {{ '%.2f%%'|format((vuln.epss_percentile or 0) * 100) }}
+            {% else %}
+              -
+            {% endif %}
+          </span>
+        </div>
+        <div>
+          <strong>EPSS Date</strong>
+          <span>
+            {% if vuln.score_date %}
+              {{ vuln.score_date }}
+            {% else %}
+              -
+            {% endif %}
+          </span>
+        </div>
+        <div>
+          <strong>Published</strong>
+          <span>{{ vuln.published.strftime('%Y-%m-%d %H:%M:%S') if vuln.published else '-' }}</span>
+        </div>
+        <div>
+          <strong>Last Modified</strong>
+          <span>{{ vuln.last_modified.strftime('%Y-%m-%d %H:%M:%S') if vuln.last_modified else '-' }}</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="detail-grid">
+    <section class="card" id="detail-descriptions">
+      <h3>Descriptions</h3>
+      {% if descriptions %}
+        <ul class="detail-list">
+          {% for row in descriptions %}
+            <li><strong>[{{ row.description_lang or 'n/a' }}]</strong> {{ row.description_value }}</li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty-note">No descriptions available.</p>
+      {% endif %}
+    </section>
+
+    <section class="card" id="detail-tags">
+      <h3>Tags</h3>
+      {% if tags %}
+        <div class="detail-pill-wrap">
+          {% for row in tags %}
+            <span class="detail-pill">{{ row.tag }}</span>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty-note">No tags available.</p>
+      {% endif %}
+    </section>
+
+    <section class="card" id="detail-cvss">
+      <h3>CVSS Metrics</h3>
+      {% if metrics %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Version</th>
+                <th>Score</th>
+                <th>Severity</th>
+                <th>Vector</th>
+                <th>Attack Complexity</th>
+                <th>Privileges</th>
+                <th>User Interaction</th>
+                <th>Scope</th>
+                <th>C</th>
+                <th>I</th>
+                <th>A</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in metrics %}
+                <tr>
+                  <td>{{ row.version or '-' }}</td>
+                  <td>{{ row.base_score if row.base_score is not none else '-' }}</td>
+                  <td>{{ row.base_severity or '-' }}</td>
+                  <td>{{ row.attack_vector or '-' }}</td>
+                  <td>{{ row.attack_complexity or '-' }}</td>
+                  <td>{{ row.privileges_required or '-' }}</td>
+                  <td>{{ row.user_interaction or '-' }}</td>
+                  <td>{{ row.scope or '-' }}</td>
+                  <td>{{ row.confidentiality_impact or '-' }}</td>
+                  <td>{{ row.integrity_impact or '-' }}</td>
+                  <td>{{ row.availability_impact or '-' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="empty-note">No CVSS metrics available.</p>
+      {% endif %}
+    </section>
+
+    <section class="card" id="detail-weaknesses">
+      <h3>Weaknesses</h3>
+      {% if weaknesses %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>Type</th>
+                <th>Lang</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in weaknesses %}
+                <tr>
+                  <td>{{ row.source or '-' }}</td>
+                  <td>{{ row.type or '-' }}</td>
+                  <td>{{ row.description_lang or '-' }}</td>
+                  <td>{{ row.description_value or '-' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="empty-note">No weakness records available.</p>
+      {% endif %}
+    </section>
+
+    <section class="card" id="detail-configurations">
+      <h3>Configurations</h3>
+      {% if configurations %}
+        {% for row in configurations %}
+          <p><strong>Operator:</strong> {{ row.operator or 'OR' }}</p>
+          <div class="json-block">{{ row.cpe_match | tojson(indent=2) }}</div>
+        {% endfor %}
+      {% else %}
+        <p class="empty-note">No configuration data available.</p>
+      {% endif %}
+    </section>
+
+    <section class="card" id="detail-references">
+      <h3>References</h3>
+      {% if references %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>URL</th>
+                <th>Source</th>
+                <th>Tags</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in references %}
+                <tr>
+                  <td>
+                    {% if row.url %}
+                      <a class="link-btn" href="{{ row.url }}" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td>{{ row.source or '-' }}</td>
+                  <td>
+                    {% if row.tags %}
+                      {{ row.tags | join(', ') }}
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="empty-note">No reference URLs available.</p>
+      {% endif %}
+    </section>
+
+    <section class="card" id="detail-pocs">
+      <h3>Linked PoCs</h3>
+      {% if pocs %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Source</th>
+                <th>URL</th>
+                <th>Files</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in pocs %}
+                <tr>
+                  <td>{{ row.id }}</td>
+                  <td>{{ row.source_identifier or '-' }}</td>
+                  <td>
+                    {% if row.url %}
+                      <a class="link-btn" href="{{ row.url }}" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td>{{ row.download_count }}</td>
+                  <td>{{ row.created_at.strftime('%Y-%m-%d %H:%M:%S') if row.created_at else '-' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="empty-note">No linked PoC records for this CVE.</p>
+      {% endif %}
+    </section>
+    </div>
+  </div>
+{% endblock %}

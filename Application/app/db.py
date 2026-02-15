@@ -120,6 +120,58 @@ def ensure_auth_schema(app):
             conn.close()
 
 
+def ensure_epss_schema(app):
+    """Create EPSS storage table used by CVE list/detail pages."""
+    conn = None
+    cur = None
+    try:
+        conn = get_conn()
+        cur = get_cursor(conn)
+
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cve_epss (
+                cve_id VARCHAR(50) PRIMARY KEY,
+                epss_score DOUBLE NULL,
+                epss_percentile DOUBLE NULL,
+                score_date DATE NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                CONSTRAINT fk_cve_epss_cve
+                    FOREIGN KEY (cve_id)
+                    REFERENCES cve_vulnerabilities (cve_id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+
+        cur.execute(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA=%s
+              AND TABLE_NAME='cve_epss'
+              AND INDEX_NAME='idx_cve_epss_score'
+            """,
+            (app.config["DB_NAME"],),
+        )
+        has_score_index = (cur.fetchone() or {}).get("cnt", 0) > 0
+        if not has_score_index:
+            cur.execute("ALTER TABLE cve_epss ADD INDEX idx_cve_epss_score (epss_score)")
+
+        conn.commit()
+        app.logger.info("EPSS schema migration check completed")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        app.logger.exception("EPSS schema migration failed: %s", e)
+        raise
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
 def ensure_performance_indexes(app):
     """Create missing non-breaking indexes used by list APIs."""
     conn = None
@@ -139,6 +191,7 @@ def ensure_performance_indexes(app):
             ("cve_poc_sources", "idx_cve_poc_created_id", "ALTER TABLE cve_poc_sources ADD INDEX idx_cve_poc_created_id (created_at, id)"),
             ("cve_poc_sources", "idx_cve_poc_source_id", "ALTER TABLE cve_poc_sources ADD INDEX idx_cve_poc_source_id (source_identifier, id)"),
             ("cve_poc_sources", "idx_cve_poc_cve_id", "ALTER TABLE cve_poc_sources ADD INDEX idx_cve_poc_cve_id (cve_id)"),
+            ("cve_epss", "idx_cve_epss_score", "ALTER TABLE cve_epss ADD INDEX idx_cve_epss_score (epss_score)"),
         ]
 
         for table_name, index_name, ddl in index_specs:

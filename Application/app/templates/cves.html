@@ -2,6 +2,44 @@
 {% block title %}CVE List{% endblock %}
 {% block header %}CVE List{% endblock %}
 
+{% block head %}
+<style>
+  #cveTable col.cve-col { width: 11%; }
+  #cveTable col.desc-col { width: 47%; }
+  #cveTable col.score-col { width: 6%; }
+  #cveTable col.epss-col { width: 7%; }
+  #cveTable col.sev-col { width: 7%; }
+  #cveTable col.vec-col { width: 7%; }
+  #cveTable col.poc-col { width: 5%; }
+  #cveTable col.tags-col { width: 10%; }
+
+  #cveTable .col-cve,
+  #cveTable .col-score,
+  #cveTable .col-epss,
+  #cveTable .col-sev,
+  #cveTable .col-vec,
+  #cveTable .col-poc {
+    white-space: nowrap;
+    word-break: normal;
+    overflow-wrap: normal;
+  }
+
+  #cveTable .col-desc {
+    min-width: 520px;
+  }
+
+  #cveTable .desc-text {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    line-height: 1.4;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <form id="cveFilterForm" class="filter-form">
   <div class="filter-row">
@@ -33,13 +71,27 @@
       <option value="LOCAL">LOCAL</option>
       <option value="PHYSICAL">PHYSICAL</option>
     </select>
+    <select name="has_poc">
+      <option value="">PoC Presence</option>
+      <option value="yes">With PoC</option>
+      <option value="no">Without PoC</option>
+    </select>
   </div>
 
   <div class="filter-row">
-    <input type="text" name="search" placeholder="Search in description">
+    <input type="text" name="search" placeholder="Search CVE ID or description">
   </div>
 
   <div class="filter-actions">
+    <label for="size" style="display:inline-flex;align-items:center;gap:0.4rem;margin-right:0.6rem;color:#b9d4f3;font-size:0.84rem;">
+      Rows
+      <select id="size" name="size" style="min-width:84px;">
+        <option value="10">10</option>
+        <option value="50">50</option>
+        <option value="100" selected>100</option>
+        <option value="200">200</option>
+      </select>
+    </label>
     <button type="submit">Apply Filters</button>
   </div>
 </form>
@@ -48,13 +100,25 @@
 
 <div class="table-wrap">
   <table id="cveTable">
+    <colgroup>
+      <col class="cve-col">
+      <col class="desc-col">
+      <col class="score-col">
+      <col class="epss-col">
+      <col class="sev-col">
+      <col class="vec-col">
+      <col class="poc-col">
+      <col class="tags-col">
+    </colgroup>
     <thead>
       <tr>
-        <th><button onclick="setSort('v.cve_id')" id="sort-cve">CVE <span class="sort-icon"></span></button></th>
-        <th><button onclick="setSort('d.description_value')" id="sort-desc">Description <span class="sort-icon"></span></button></th>
-        <th><button onclick="setSort('m.base_score')" id="sort-score">Score <span class="sort-icon"></span></button></th>
-        <th><button onclick="setSort('m.base_severity')" id="sort-sev">Severity <span class="sort-icon"></span></button></th>
-        <th><button onclick="setSort('m.attack_vector')" id="sort-vec">Vector <span class="sort-icon"></span></button></th>
+        <th class="col-cve"><button onclick="setSort('v.cve_id')" id="sort-cve">CVE <span class="sort-icon"></span></button></th>
+        <th class="col-desc"><button onclick="setSort('d.description_value')" id="sort-desc">Description <span class="sort-icon"></span></button></th>
+        <th class="col-score"><button onclick="setSort('m.base_score')" id="sort-score">Score <span class="sort-icon"></span></button></th>
+        <th class="col-epss"><button onclick="setSort('e.epss_score')" id="sort-epss">EPSS <span class="sort-icon"></span></button></th>
+        <th class="col-sev"><button onclick="setSort('m.base_severity')" id="sort-sev">Severity <span class="sort-icon"></span></button></th>
+        <th class="col-vec"><button onclick="setSort('m.attack_vector')" id="sort-vec">Vector <span class="sort-icon"></span></button></th>
+        <th class="col-poc"><button onclick="setSort('has_poc')" id="sort-poc">PoC <span class="sort-icon"></span></button></th>
         <th><button onclick="setSort('tags')" id="sort-tags">Tags <span class="sort-icon"></span></button></th>
       </tr>
     </thead>
@@ -72,6 +136,24 @@ function escapeHTML(str) {
   })[m]);
 }
 
+function compactDescription(text, max = 280) {
+  const s = String(text || "").trim();
+  if (s.length <= max) return s;
+  return `${s.slice(0, max - 1)}...`;
+}
+
+function formatEpssCell(score, percentile) {
+  if (score === null || score === undefined || score === "") return "-";
+  const scoreNumber = Number(score);
+  if (!Number.isFinite(scoreNumber)) return "-";
+  const scorePct = (scoreNumber * 100).toFixed(3) + "%";
+  const pNumber = Number(percentile);
+  if (Number.isFinite(pNumber)) {
+    return `${scorePct} (P${(pNumber * 100).toFixed(1)})`;
+  }
+  return scorePct;
+}
+
 const severityColors = {
   "CRITICAL": "#ff6e93",
   "HIGH": "#ffae66",
@@ -82,6 +164,35 @@ const severityColors = {
 let currentPage = 1;
 let currentFilters = {};
 let currentSort = { column: "v.cve_id", order: "DESC" };
+const allowedSortColumns = new Set(["v.cve_id", "d.description_value", "m.base_score", "e.epss_score", "m.base_severity", "m.attack_vector", "has_poc", "tags"]);
+const allowedPageSizes = new Set(["10", "50", "100", "200"]);
+const filterKeys = ["start", "end", "severity", "min_score", "max_score", "tag", "vector", "has_poc", "search", "size"];
+
+function normalizeFilters(filters) {
+  const cleaned = {};
+  for (const key of filterKeys) {
+    const v = (filters[key] ?? "").toString().trim();
+    if (key === "size" && v !== "" && !allowedPageSizes.has(v)) continue;
+    if (v !== "") cleaned[key] = v;
+  }
+  return cleaned;
+}
+
+function buildStateParams(page = currentPage, filters = currentFilters, sort = currentSort) {
+  const params = new URLSearchParams();
+  const cleaned = normalizeFilters(filters || {});
+  Object.entries(cleaned).forEach(([k, v]) => params.set(k, v));
+  params.set("page", String(page || 1));
+  params.set("sort", sort?.column || "v.cve_id");
+  params.set("order", sort?.order || "DESC");
+  return params;
+}
+
+function syncListUrl() {
+  const params = buildStateParams();
+  const nextUrl = `/cves?${params.toString()}`;
+  history.replaceState(null, "", nextUrl);
+}
 
 function setSort(column) {
   if (currentSort.column === column) {
@@ -102,8 +213,10 @@ function updateSortIcons() {
     "v.cve_id": "sort-cve",
     "d.description_value": "sort-desc",
     "m.base_score": "sort-score",
+    "e.epss_score": "sort-epss",
     "m.base_severity": "sort-sev",
     "m.attack_vector": "sort-vec",
+    "has_poc": "sort-poc",
     "tags": "sort-tags"
   };
   const activeBtn = document.getElementById(idMap[currentSort.column]);
@@ -115,8 +228,9 @@ function updateSortIcons() {
 
 function loadCVE(page=1, filters={}) {
   currentPage = page;
-  currentFilters = filters;
-  const params = new URLSearchParams({ ...filters, page, sort: currentSort.column, order: currentSort.order });
+  currentFilters = normalizeFilters(filters);
+  const params = buildStateParams(currentPage, currentFilters, currentSort);
+  syncListUrl();
   fetch("/api/cves?" + params)
     .then(r => r.json())
     .then(data => {
@@ -125,12 +239,23 @@ function loadCVE(page=1, filters={}) {
       data.items.forEach(r => {
         const sev = r.base_severity?.toUpperCase?.() || "";
         const sevColor = severityColors[sev] || "";
+        const hasPoc = Number(r.has_poc) === 1;
+        const pocBadge = hasPoc
+          ? '<span class="status-pill status-success">YES</span>'
+          : '<span class="status-pill status-neutral">NO</span>';
+        const returnTo = `/cves?${params.toString()}`;
+        const cveUrl = `/cves/${encodeURIComponent(r.cve_id || "")}?return=${encodeURIComponent(returnTo)}`;
+        const fullDesc = escapeHTML(r.description_value || "");
+        const shortDesc = escapeHTML(compactDescription(r.description_value));
+        const epssText = escapeHTML(formatEpssCell(r.epss_score, r.epss_percentile));
         tbody.innerHTML += `<tr>
-          <td>${escapeHTML(r.cve_id)}</td>
-          <td>${escapeHTML(r.description_value)}</td>
-          <td>${r.base_score ?? ""}</td>
-          <td style="color:${sevColor};font-weight:bold;">${escapeHTML(sev)}</td>
-          <td>${escapeHTML(r.attack_vector)}</td>
+          <td class="col-cve"><a class="link-btn" href="${cveUrl}">${escapeHTML(r.cve_id)}</a></td>
+          <td class="col-desc"><span class="desc-text" title="${fullDesc}">${shortDesc}</span></td>
+          <td class="col-score">${r.base_score ?? ""}</td>
+          <td class="col-epss">${epssText}</td>
+          <td class="col-sev" style="color:${sevColor};font-weight:bold;">${escapeHTML(sev)}</td>
+          <td class="col-vec">${escapeHTML(r.attack_vector)}</td>
+          <td class="col-poc">${pocBadge}</td>
           <td>${escapeHTML(r.tags)}</td>
         </tr>`;
       });
@@ -153,10 +278,53 @@ function renderPagination(elementId, data) {
 
 document.getElementById("cveFilterForm").onsubmit = e => {
   e.preventDefault();
-  const filters = Object.fromEntries(new FormData(e.target));
+  const filters = normalizeFilters(Object.fromEntries(new FormData(e.target)));
   loadCVE(1, filters);
 };
 
-loadCVE(1);
+document.getElementById("size").addEventListener("change", (e) => {
+  loadCVE(1, { ...currentFilters, size: String(e.target.value || "100") });
+});
+
+function restoreStateFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const restoredFilters = {};
+  filterKeys.forEach((key) => {
+    const val = params.get(key);
+    if (val !== null && val !== "") restoredFilters[key] = val;
+  });
+  if (restoredFilters.size && !allowedPageSizes.has(restoredFilters.size)) {
+    delete restoredFilters.size;
+  }
+
+  const sort = params.get("sort");
+  const order = (params.get("order") || "").toUpperCase();
+  if (sort && allowedSortColumns.has(sort)) {
+    currentSort.column = sort;
+  }
+  if (order === "ASC" || order === "DESC") {
+    currentSort.order = order;
+  }
+
+  for (const [k, v] of Object.entries(restoredFilters)) {
+    const field = document.querySelector(`#cveFilterForm [name="${k}"]`);
+    if (field) field.value = v;
+  }
+
+  if (!restoredFilters.size) {
+    const sizeField = document.querySelector('#cveFilterForm [name="size"]');
+    if (sizeField && sizeField.value) restoredFilters.size = sizeField.value;
+  }
+
+  let page = Number(params.get("page") || 1);
+  if (!Number.isFinite(page) || page < 1) page = 1;
+
+  currentFilters = restoredFilters;
+  currentPage = page;
+}
+
+restoreStateFromUrl();
+updateSortIcons();
+loadCVE(currentPage, currentFilters);
 </script>
 {% endblock %}

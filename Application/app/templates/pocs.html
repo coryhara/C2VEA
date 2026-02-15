@@ -13,6 +13,15 @@
     <input type="text" name="keyword" placeholder="Search keyword">
   </div>
   <div class="filter-actions">
+    <label for="pocPageSize" style="display:inline-flex;align-items:center;gap:0.4rem;margin-right:0.6rem;color:#b9d4f3;font-size:0.84rem;">
+      Rows
+      <select id="pocPageSize" name="size" style="min-width:84px;">
+        <option value="10">10</option>
+        <option value="50">50</option>
+        <option value="100" selected>100</option>
+        <option value="200">200</option>
+      </select>
+    </label>
     <button type="submit">Search</button>
   </div>
 </form>
@@ -52,7 +61,7 @@ function escapeHTML(str) {
 }
 
 let currentPage = 1;
-let currentFilters = {};
+let currentFilters = { size: "100" };
 let currentSort = { column: "created_at", order: "DESC" };
 
 function setSort(column) {
@@ -86,8 +95,13 @@ function updateSortIcons() {
 
 function loadPOC(page=1, filters={}) {
   currentPage = page;
-  currentFilters = filters;
-  const params = new URLSearchParams({ ...filters, page, sort: currentSort.column, order: currentSort.order });
+  const mergedFilters = { ...filters };
+  if (!mergedFilters.size) {
+    const sizeField = document.getElementById("pocPageSize");
+    mergedFilters.size = sizeField?.value || "100";
+  }
+  currentFilters = mergedFilters;
+  const params = new URLSearchParams({ ...currentFilters, page, sort: currentSort.column, order: currentSort.order });
   fetch("/api/pocs?" + params)
     .then(r => r.json())
     .then(data => {
@@ -136,11 +150,15 @@ document.getElementById("pocFilterForm").onsubmit = e => {
   const form = new FormData(e.target);
   const searchType = form.get("search_type");
   const keyword = form.get("keyword");
-  const filters = {};
+  const filters = { size: String(form.get("size") || "100") };
   if (keyword) filters["search_type"] = searchType, filters["keyword"] = keyword;
   loadPOC(1, filters);
 };
 
-loadPOC(1);
+document.getElementById("pocPageSize").addEventListener("change", (e) => {
+  loadPOC(1, { ...currentFilters, size: String(e.target.value || "100") });
+});
+
+loadPOC(1, currentFilters);
 </script>
 {% endblock %}

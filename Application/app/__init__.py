@@ -16,14 +16,14 @@ def create_app():
     app.config.update(asdict(cfg))
     app.secret_key = app.config["SECRET_KEY"]
 
-    raw = app.config["ALLOWED_ORIGINS"]
-    allowed = [o.strip() for o in raw.replace(";", ",").split(",") if o.strip()]
-    cors = allowed if allowed else None
-    socketio.init_app(app, cors_allowed_origins=cors)
+    # Socket updates should work even when dashboard is accessed by local IP.
+    # Keep HTTP origin restrictions in app config; relax only socket origin checks.
+    socketio.init_app(app, cors_allowed_origins="*")
 
-    from .db import init_pool, ensure_auth_schema, ensure_performance_indexes
+    from .db import init_pool, ensure_auth_schema, ensure_epss_schema, ensure_performance_indexes
     init_pool(app)
     ensure_auth_schema(app)
+    ensure_epss_schema(app)
     ensure_performance_indexes(app)
 
     @app.context_processor

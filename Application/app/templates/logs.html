@@ -2,9 +2,32 @@
 {% block title %}Real-Time Log Viewer{% endblock %}
 {% block header %}Real-Time Log Viewer{% endblock %}
 
+{% block head %}
+<style>
+  #logsTable {
+    table-layout: auto;
+  }
+
+  #logsTable th:nth-child(1),
+  #logsTable td:nth-child(1),
+  #logsTable th:nth-child(2),
+  #logsTable td:nth-child(2),
+  #logsTable th:nth-child(4),
+  #logsTable td:nth-child(4) {
+    width: 1%;
+    white-space: nowrap;
+  }
+
+  #logsTable th:nth-child(3),
+  #logsTable td:nth-child(3) {
+    width: auto;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="table-wrap">
-  <table>
+  <table id="logsTable">
     <thead>
       <tr>
         <th>ID</th>

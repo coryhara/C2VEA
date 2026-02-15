@@ -1,7 +1,7 @@
 :root {
   color-scheme: dark;
-  --page-max-width: 1800px;
-  --page-gutter: clamp(0.7rem, 1.2vw, 1.2rem);
+  --page-max-width: 2200px;
+  --page-gutter: clamp(0.35rem, 0.9vw, 0.85rem);
   --bg: #070d19;
   --bg-2: #0d1628;
   --surface: #0f1b31;
@@ -249,7 +249,7 @@ a:hover {
 }
 
 .page-shell {
-  width: min(98vw, var(--page-max-width));
+  width: min(99.4vw, var(--page-max-width));
   max-width: var(--page-max-width);
   margin: 1.45rem auto 2.2rem;
   padding: 0 var(--page-gutter);
@@ -263,7 +263,7 @@ a:hover {
   border: 1px solid rgba(108, 149, 219, 0.36);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
-  padding: 1.2rem;
+  padding: 1rem;
   animation: panel-enter 420ms ease both;
 }
 
@@ -545,15 +545,20 @@ button:hover {
 }
 
 .dashboard-grid {
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  align-items: stretch;
 }
 
 .dashboard-grid .card {
-  grid-column: span 4;
+  grid-column: auto;
 }
 
 .dashboard-grid #card-poc {
-  grid-column: span 4;
+  grid-column: auto;
+}
+
+.dashboard-grid #card-tags {
+  grid-column: span 2;
 }
 
 .card {
@@ -889,9 +894,12 @@ form#loginForm {
     min-width: 680px;
   }
 
-  .dashboard-grid .card,
-  .dashboard-grid #card-poc {
-    grid-column: span 6;
+  .dashboard-grid {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+
+  .dashboard-grid #card-tags {
+    grid-column: auto;
   }
 
   .settings-form .settings-row {
@@ -931,9 +939,12 @@ form#loginForm {
     min-width: 620px;
   }
 
-  .dashboard-grid .card,
-  .dashboard-grid #card-poc {
-    grid-column: span 12;
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-grid #card-tags {
+    grid-column: auto;
   }
 }
 

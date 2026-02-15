@@ -73,6 +73,15 @@ CREATE TABLE IF NOT EXISTS cve_references (
     FOREIGN KEY (cve_id) REFERENCES cve_vulnerabilities (cve_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS cve_epss (
+    cve_id VARCHAR(50) PRIMARY KEY,
+    epss_score DOUBLE NULL,
+    epss_percentile DOUBLE NULL,
+    score_date DATE NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (cve_id) REFERENCES cve_vulnerabilities (cve_id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS cve_poc_sources (
     id SERIAL PRIMARY KEY,
     cve_id VARCHAR(50) NOT NULL,
@@ -133,6 +142,8 @@ CREATE INDEX IF NOT EXISTS idx_cve_poc_source_id
     ON cve_poc_sources (source_identifier, id);
 CREATE INDEX IF NOT EXISTS idx_cve_poc_cve_id
     ON cve_poc_sources (cve_id);
+CREATE INDEX IF NOT EXISTS idx_cve_epss_score
+    ON cve_epss (epss_score);
 
 -- ============================================
 -- 초기 구성 데이터 (환경 설정)

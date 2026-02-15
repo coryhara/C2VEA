@@ -77,10 +77,11 @@ def run_cve_task(config):
     )
     cve_base_dir = processor.cve_base_dir
     cve_parser = CVEParser(DB_CONFIG, json_base_dir_path=cve_base_dir, start_year=start_year)
-
-    processor.run()
-    cve_parser.process_data()
-    cve_parser.commit_and_close()
+    try:
+        processor.run()
+        cve_parser.process_data()
+    finally:
+        cve_parser.commit_and_close()
 
 
 def run_github_task(config):

@@ -33,6 +33,18 @@ class GitHubPoCCollector:
         self.remaining = 5000
         self.limit = 5000
         self.reset_at = None
+        self.min_confidence_score = 90
+        self.max_repo_candidates = 300
+        self.readme_cache = {}
+        self.poc_keywords = (
+            "poc",
+            "proof of concept",
+            "proof-of-concept",
+            "exploit",
+            "rce",
+            "privilege escalation",
+            "cve",
+        )
 
     # =========================
     # Logging
@@ -114,6 +126,8 @@ class GitHubPoCCollector:
                             description
                             updatedAt
                             stargazerCount
+                            isArchived
+                            isFork
                             primaryLanguage { name }
                             owner { login url }
                             defaultBranchRef {
@@ -136,7 +150,7 @@ class GitHubPoCCollector:
         repos, cursor = [], None
         while True:
             self.check_rate_limit()
-            variables = {"q": f'"{cve_id}" in:name sort:updated-desc', "cursor": cursor}
+            variables = {"q": f'"{cve_id}" in:name,description,readme archived:false fork:false sort:updated-desc', "cursor": cursor}
             data = self.graphql_request(query, variables)
             if not data or "data" not in data:
                 self.log("FAILURE", f"{cve_id}: GraphQL search failed")
@@ -145,7 +159,11 @@ class GitHubPoCCollector:
             search_data = data["data"]["search"]
             for edge in search_data.get("edges", []):
                 repos.append(edge["node"])
+                if len(repos) >= self.max_repo_candidates:
+                    break
 
+            if len(repos) >= self.max_repo_candidates:
+                break
             if not search_data.get("pageInfo", {}).get("hasNextPage"):
                 break
             cursor = search_data["pageInfo"]["endCursor"]
@@ -153,6 +171,115 @@ class GitHubPoCCollector:
 
         self.log("SUCCESS", f"{cve_id}: Found {len(repos)} repos")
         return repos
+
+    def _contains_exact_cve(self, text, cve_id):
+        if not text:
+            return False
+        return re.search(rf"\b{re.escape(cve_id)}\b", str(text), flags=re.IGNORECASE) is not None
+
+    def _contains_poc_keyword(self, text):
+        if not text:
+            return False
+        lowered = str(text).lower()
+        return any(keyword in lowered for keyword in self.poc_keywords)
+
+    def _fetch_readme_text(self, owner, name):
+        cache_key = f"{owner}/{name}".lower()
+        if cache_key in self.readme_cache:
+            return self.readme_cache[cache_key]
+
+        url = f"https://api.github.com/repos/{owner}/{name}/readme"
+        headers = {
+            "Authorization": f"token {self.github_token}",
+            "Accept": "application/vnd.github.raw",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+        text = ""
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                res = requests.get(url, headers=headers, timeout=20)
+                if res.status_code == 200:
+                    text = res.text or ""
+                    break
+                if res.status_code in (403, 429):
+                    wait = self.retry_interval * attempt
+                    time.sleep(wait)
+                    continue
+                if res.status_code in (404, 451):
+                    break
+            except Exception:
+                time.sleep(self.retry_interval)
+
+        self.readme_cache[cache_key] = text
+        return text
+
+    def _score_repo(self, repo, cve_id):
+        name = repo.get("name") or ""
+        desc = repo.get("description") or ""
+        owner = (repo.get("owner") or {}).get("login") or ""
+
+        name_hit = self._contains_exact_cve(name, cve_id)
+        desc_hit = self._contains_exact_cve(desc, cve_id)
+        meta_keyword_hit = self._contains_poc_keyword(name) or self._contains_poc_keyword(desc)
+
+        readme = ""
+        readme_cve_hit = False
+        readme_keyword_hit = False
+
+        # README 기반 확인은 정확도 향상을 위해 필요한 경우만 수행
+        if (not (name_hit or desc_hit) or not meta_keyword_hit) and owner and name:
+            readme = self._fetch_readme_text(owner, name)
+            readme_cve_hit = self._contains_exact_cve(readme, cve_id)
+            readme_keyword_hit = self._contains_poc_keyword(readme)
+
+        score = 0
+        if name_hit:
+            score += 70
+        if desc_hit:
+            score += 35
+        if meta_keyword_hit:
+            score += 20
+        if readme_cve_hit:
+            score += 25
+        if readme_keyword_hit:
+            score += 20
+
+        if repo.get("isFork"):
+            score -= 40
+        if repo.get("isArchived"):
+            score -= 100
+
+        if int(repo.get("stargazerCount") or 0) >= 5:
+            score += 5
+
+        has_cve_signal = name_hit or desc_hit or readme_cve_hit
+        has_poc_signal = meta_keyword_hit or readme_keyword_hit
+        is_high_confidence = (
+            score >= self.min_confidence_score
+            and has_cve_signal
+            and has_poc_signal
+            and not repo.get("isFork")
+            and not repo.get("isArchived")
+        )
+
+        return is_high_confidence, score
+
+    def filter_high_confidence_repos(self, cve_id, repos):
+        if not repos:
+            return []
+
+        selected = []
+        for repo in repos:
+            ok, score = self._score_repo(repo, cve_id)
+            if not ok:
+                continue
+            repo["_confidence_score"] = score
+            selected.append(repo)
+
+        selected.sort(key=lambda r: r.get("_confidence_score", 0), reverse=True)
+        self.log("INFO", f"{cve_id}: {len(selected)}/{len(repos)} repos passed high-confidence filter")
+        return selected
 
     # =========================
     # ZIP ?뚯씪 ?ㅼ슫濡쒕뱶 諛?DB ???
@@ -276,6 +403,10 @@ class GitHubPoCCollector:
         try:
             repos = self.search_github_repos(cve)
             if not repos:
+                return
+            repos = self.filter_high_confidence_repos(cve, repos)
+            if not repos:
+                self.log("INFO", f"{cve}: No high-confidence PoC repositories found")
                 return
 
             for repo in repos:
