@@ -1,4 +1,3 @@
-import os
 from flask import Flask
 from flask_socketio import SocketIO
 from dataclasses import asdict
@@ -12,22 +11,27 @@ socketio = SocketIO(
 
 def create_app():
     app = Flask(__name__, template_folder="templates")
-    app.secret_key = os.urandom(32)
 
     cfg = load_config()
     app.config.update(asdict(cfg))
+    app.secret_key = app.config["SECRET_KEY"]
 
     raw = app.config["ALLOWED_ORIGINS"]
     allowed = [o.strip() for o in raw.replace(";", ",").split(",") if o.strip()]
     cors = allowed if allowed else None
     socketio.init_app(app, cors_allowed_origins=cors)
 
-    from .db import init_pool
+    from .db import init_pool, ensure_auth_schema, ensure_performance_indexes
     init_pool(app)
+    ensure_auth_schema(app)
+    ensure_performance_indexes(app)
 
     @app.context_processor
     def inject_global_config():
-        return dict(ALLOWED_ORIGINS=app.config.get("ALLOWED_ORIGINS", []))
+        return dict(
+            ALLOWED_ORIGINS=app.config.get("ALLOWED_ORIGINS", ""),
+            PUBLIC_BASE_URL=app.config.get("PUBLIC_BASE_URL", "")
+        )
 
     from app.routes.cve_routes import cve_bp
     from app.routes.poc_routes import poc_bp

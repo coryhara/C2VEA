@@ -10,6 +10,51 @@ from app.utils.decorators import (
 
 cve_bp = Blueprint("cve", __name__)
 
+
+def _build_cve_count_query(args):
+    joins = []
+    where = ["1=1"]
+    params = []
+
+    if args.get("start") and args.get("end"):
+        where.append("v.published BETWEEN %s AND %s")
+        params.extend([args["start"], args["end"]])
+
+    need_metrics = bool(args.get("severity") or (args.get("min_score") and args.get("max_score")) or args.get("vector"))
+    need_tags = bool(args.get("tag"))
+    need_desc = bool(args.get("search"))
+
+    if need_metrics:
+        joins.append("INNER JOIN cvss_metrics m ON v.cve_id = m.cve_id")
+    if need_tags:
+        joins.append("INNER JOIN cve_tags t ON v.cve_id = t.cve_id")
+    if need_desc:
+        joins.append("INNER JOIN cve_descriptions d ON v.cve_id = d.cve_id")
+
+    if args.get("severity"):
+        where.append("m.base_severity = %s")
+        params.append(args["severity"])
+    if args.get("min_score") and args.get("max_score"):
+        where.append("m.base_score BETWEEN %s AND %s")
+        params.extend([args["min_score"], args["max_score"]])
+    if args.get("tag"):
+        where.append("t.tag LIKE %s")
+        params.append(f"%{args['tag']}%")
+    if args.get("vector"):
+        where.append("m.attack_vector = %s")
+        params.append(args["vector"])
+    if args.get("search"):
+        where.append("d.description_value LIKE %s")
+        params.append(f"%{args['search']}%")
+
+    query = f"""
+        SELECT COUNT(DISTINCT v.cve_id) AS total
+        FROM cve_vulnerabilities v
+        {' '.join(joins)}
+        WHERE {' AND '.join(where)}
+    """
+    return query, params
+
 @cve_bp.get("/cves")
 @login_required
 @email_verified_required
@@ -27,7 +72,7 @@ def dashboard():
 @email_verified_required
 def api_cves():
     args = request.args
-    page = int(args.get("page", 1))
+    page = max(int(args.get("page", 1)), 1)
     size = 100
     offset = (page - 1) * size
 
@@ -85,13 +130,13 @@ def api_cves():
     params_data = params + [size, offset]
 
     # === total 쿼리 (조건 포함) ===
-    count_query = f"SELECT COUNT(DISTINCT v.cve_id) AS total {base_query}"
+    count_query, count_params = _build_cve_count_query(args)
 
     with get_conn() as conn, get_cursor(conn) as cur:
         cur.execute(data_query, params_data)
         rows = cur.fetchall()
 
-        cur.execute(count_query, params)
+        cur.execute(count_query, count_params)
         total = cur.fetchone()["total"]
 
     return jsonify({

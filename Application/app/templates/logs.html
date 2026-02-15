@@ -1,47 +1,99 @@
-{% extends "base.html" %} 
-{% block title %}Real-Time Log Viewer{% endblock %} 
-{% block header %}🧪 REAL-TIME LOG VIEWER{% endblock %} 
+{% extends "base.html" %}
+{% block title %}Real-Time Log Viewer{% endblock %}
+{% block header %}Real-Time Log Viewer{% endblock %}
 
 {% block content %}
-<div id="controls">
-  <button onclick="window.location.href='/'">🏠 Home</button>
-  <button onclick="window.location.href='/dashboard'">🛡️ CVE Analytics Dashboard</button>
-  <button onclick="window.location.href='/cves'">🐞 CVE List</button>
-  <button onclick="window.location.href='/pocs'">☄️ PoC List</button>
-  {% if session.admin_permission == 1 %}
-  <button onclick="window.location.href='/settings'">⚙️ Settings</button>
-  {% endif %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Status</th>
+        <th>Message</th>
+        <th>Time (KST)</th>
+      </tr>
+    </thead>
+    <tbody id="logTableBody"></tbody>
+  </table>
 </div>
-
-<table>
-  <thead>
-    <tr>
-      <th>ID</th>
-      <th>Status</th>
-      <th>Message</th>
-      <th>Time (KST)</th>
-    </tr>
-  </thead>
-  <tbody id="logTableBody"></tbody>
-</table>
 {% endblock %}
 
 {% block scripts %}
+{{ super() }}
 <script src="{{ url_for('static', filename='js/logs.js') }}"></script>
 <script>
-  const socket = io("{{ ALLOWED_ORIGINS }}", {
-    path: "/socket.io/",
-    transports: ["websocket"],
-  });
+  let fallbackTimer = null;
 
-  socket.on("connect", () => {
-    console.log("✅ Socket connected:", socket.id);
-    socket.emit("subscribe_logs", { last_id: 0 });
-  });
-
-  socket.on("logs", (rows) => {
-    if (!tableBody) return;
+  function upsertRows(rows) {
+    if (!Array.isArray(rows)) return;
     for (const log of rows) prependLog(log);
+  }
+
+  async function fetchLogsSince(lastId) {
+    const res = await fetch(`/api/logs/since?last_id=${encodeURIComponent(lastId)}`);
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  function startFallbackPolling() {
+    if (fallbackTimer) return;
+    fallbackTimer = setInterval(async () => {
+      try {
+        const rows = await fetchLogsSince(getLastLogId());
+        upsertRows(rows);
+      } catch (e) {
+        console.error("Fallback log polling failed:", e);
+      }
+    }, 1000);
+  }
+
+  function stopFallbackPolling() {
+    if (!fallbackTimer) return;
+    clearInterval(fallbackTimer);
+    fallbackTimer = null;
+  }
+
+  async function loadInitialLogs() {
+    try {
+      const res = await fetch("/api/logs/latest");
+      if (!res.ok) return;
+      const rows = await res.json();
+      const ordered = Array.isArray(rows) ? [...rows].reverse() : [];
+      upsertRows(ordered);
+    } catch (e) {
+      console.error("Initial log fetch failed:", e);
+    }
+  }
+
+  function connectLogsSocket() {
+    const socket = io({
+      path: "/socket.io/",
+      transports: ["websocket", "polling"],
+    });
+
+    socket.on("connect", () => {
+      stopFallbackPolling();
+      socket.emit("subscribe_logs", { last_id: getLastLogId() });
+    });
+
+    socket.on("logs", (rows) => {
+      upsertRows(rows);
+    });
+
+    socket.on("disconnect", () => {
+      startFallbackPolling();
+    });
+
+    socket.on("connect_error", (err) => {
+      console.error("Socket connect error:", err?.message || err);
+      startFallbackPolling();
+    });
+  }
+
+  loadInitialLogs().then(() => {
+    startFallbackPolling();
+    connectLogsSocket();
   });
 </script>
 {% endblock %}

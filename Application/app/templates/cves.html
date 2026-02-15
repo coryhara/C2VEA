@@ -1,76 +1,66 @@
 {% extends "base.html" %}
 {% block title %}CVE List{% endblock %}
-{% block header %}🐞 CVE List{% endblock %}
+{% block header %}CVE List{% endblock %}
 
 {% block content %}
-<div id="controls">
-  <button onclick="window.location.href='/dashboard'">🛡️ CVE Analytics Dashboard</button>
-  <button onclick="window.location.href='/pocs'">☄️ PoC List</button>
-  {% if session.admin_permission == 1 %}
-  <button onclick="window.location.href='/logs'">📝 Logs</button>
-  <button onclick="window.location.href='/settings'">⚙️ Settings</button>
-  {% endif %}
-</div>
-
 <form id="cveFilterForm" class="filter-form">
-  <!-- 1행: 기본 검색 -->
-<div class="filter-row">
-  <div class="filter-group">
-    <label for="start">Start</label>
-    <input type="date" id="start" name="start">
+  <div class="filter-row">
+    <div class="filter-group">
+      <label for="start">Start Date</label>
+      <input type="date" id="start" name="start">
+    </div>
+    <div class="filter-group">
+      <label for="end">End Date</label>
+      <input type="date" id="end" name="end">
+    </div>
   </div>
-  <div class="filter-group">
-    <label for="end">End</label>
-    <input type="date" id="end" name="end">
+
+  <div class="filter-row">
+    <select name="severity">
+      <option value="">Severity</option>
+      <option>LOW</option>
+      <option>MEDIUM</option>
+      <option>HIGH</option>
+      <option>CRITICAL</option>
+    </select>
+    <input type="number" name="min_score" min="0" max="10" placeholder="CVSS min">
+    <input type="number" name="max_score" min="0" max="10" placeholder="CVSS max">
+    <input type="text" name="tag" placeholder="Tag">
+    <select name="vector">
+      <option value="">Attack Vector</option>
+      <option value="NETWORK">NETWORK</option>
+      <option value="ADJACENT">ADJACENT</option>
+      <option value="LOCAL">LOCAL</option>
+      <option value="PHYSICAL">PHYSICAL</option>
+    </select>
   </div>
-</div>
 
-<!-- 2행: 상세 조건 -->
-<div class="filter-row">
-  <select name="severity">
-    <option value="">Severity</option>
-    <option>LOW</option>
-    <option>MEDIUM</option>
-    <option>HIGH</option>
-    <option>CRITICAL</option>
-  </select>
-  <input type="number" name="min_score" min="0" max="10" placeholder="CVSS min">
-  <input type="number" name="max_score" min="0" max="10" placeholder="CVSS max">
-  <input type="text" name="tag" placeholder="Tag">
-  <select name="vector">
-    <option value="">Attack Vector</option>
-    <option value="NETWORK">NETWORK</option>
-    <option value="ADJACENT">ADJACENT</option>
-    <option value="LOCAL">LOCAL</option>
-    <option value="PHYSICAL">PHYSICAL</option>
-  </select>
-</div>
+  <div class="filter-row">
+    <input type="text" name="search" placeholder="Search in description">
+  </div>
 
-<div class="filter-row">
-  <input type="text" name="search" placeholder="Search in description...">
-</div>
-
-  <!-- 버튼 -->
   <div class="filter-actions">
-    <button type="submit">Filter</button>
+    <button type="submit">Apply Filters</button>
   </div>
 </form>
 
 <div id="pagination-top"></div>
 
-<table id="cveTable">
-  <thead>
-    <tr>
-      <th><button onclick="setSort('v.cve_id')" id="sort-cve">CVE <span class="sort-icon"></span></button></th>
-      <th><button onclick="setSort('d.description_value')" id="sort-desc">Description <span class="sort-icon"></span></button></th>
-      <th><button onclick="setSort('m.base_score')" id="sort-score">Score <span class="sort-icon"></span></button></th>
-      <th><button onclick="setSort('m.base_severity')" id="sort-sev">Severity <span class="sort-icon"></span></button></th>
-      <th><button onclick="setSort('m.attack_vector')" id="sort-vec">Vector <span class="sort-icon"></span></button></th>
-      <th><button onclick="setSort('tags')" id="sort-tags">Tags <span class="sort-icon"></span></button></th>
-    </tr>
-  </thead>
-  <tbody></tbody>
-</table>
+<div class="table-wrap">
+  <table id="cveTable">
+    <thead>
+      <tr>
+        <th><button onclick="setSort('v.cve_id')" id="sort-cve">CVE <span class="sort-icon"></span></button></th>
+        <th><button onclick="setSort('d.description_value')" id="sort-desc">Description <span class="sort-icon"></span></button></th>
+        <th><button onclick="setSort('m.base_score')" id="sort-score">Score <span class="sort-icon"></span></button></th>
+        <th><button onclick="setSort('m.base_severity')" id="sort-sev">Severity <span class="sort-icon"></span></button></th>
+        <th><button onclick="setSort('m.attack_vector')" id="sort-vec">Vector <span class="sort-icon"></span></button></th>
+        <th><button onclick="setSort('tags')" id="sort-tags">Tags <span class="sort-icon"></span></button></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
 
 <div id="pagination-bottom"></div>
 
@@ -82,12 +72,11 @@ function escapeHTML(str) {
   })[m]);
 }
 
-// 🔥 색상 매핑 테이블
 const severityColors = {
-  "CRITICAL": "#9E4A4A", // 어두운 붉은기
-  "HIGH": "#B87D3C",     // 따뜻한 갈색빛 주황
-  "MEDIUM": "#9B7E3A",   // 톤다운된 황금빛
-  "LOW": "#6B8E6B"       // 회색
+  "CRITICAL": "#ff6e93",
+  "HIGH": "#ffae66",
+  "MEDIUM": "#ffd973",
+  "LOW": "#74e0a6"
 };
 
 let currentPage = 1;
@@ -157,7 +146,7 @@ function renderPagination(elementId, data) {
   let end = Math.min(data.pages, data.page + 5);
   if (data.page > 1) pagination.innerHTML += `<button onclick="loadCVE(${data.page-1}, currentFilters)">Prev</button>`;
   for (let i = start; i <= end; i++) {
-    pagination.innerHTML += `<button onclick="loadCVE(${i}, currentFilters)" ${i===data.page?'style="font-weight:bold;background:#2d2d2d;"':''}>${i}</button>`;
+    pagination.innerHTML += `<button onclick="loadCVE(${i}, currentFilters)" ${i===data.page?'class="active-page"':''}>${i}</button>`;
   }
   if (data.page < data.pages) pagination.innerHTML += `<button onclick="loadCVE(${data.page+1}, currentFilters)">Next</button>`;
 }

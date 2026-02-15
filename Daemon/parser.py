@@ -35,8 +35,7 @@ class CVEParser:
     # =========================
     # JSON 로드
     # =========================
-    def load_json_data_from_year_dirs(self):
-        data = []
+    def iter_json_data_from_year_dirs(self):
         current_year = datetime.now().year
         for year in range(self.start_year, current_year + 1):
             year_dir_path = os.path.join(self.json_base_dir_path, str(year))
@@ -46,11 +45,9 @@ class CVEParser:
                         file_path = os.path.join(year_dir_path, filename)
                         with open(file_path, 'r', encoding='utf-8') as f:
                             try:
-                                file_data = json.load(f)
-                                data.append(file_data)
+                                yield json.load(f)
                             except json.JSONDecodeError:
                                 self.log("ERROR", f"Invalid JSON format: {file_path}")
-        return data
 
     # =========================
     # 데이터 삽입 (Upsert 방식)
@@ -185,8 +182,7 @@ class CVEParser:
     # =========================
     def process_data(self):
         try:
-            data = self.load_json_data_from_year_dirs()
-            for file_data in data:
+            for file_data in self.iter_json_data_from_year_dirs():
                 for item in file_data:
                     cve = item['cve']
                     self.insert_cve_vulnerabilities(cve)

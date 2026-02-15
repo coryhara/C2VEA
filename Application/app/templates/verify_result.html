@@ -1,11 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Email Verification{% endblock %}
-{% block header %}📧 Email Verification{% endblock %}
+{% block header %}Email Verification{% endblock %}
 
 {% block content %}
-<div class="auth-container" style="text-align:center; padding:2rem;">
-  <h2>{{ message }}</h2>
-  <br>
-  <button onclick="window.location.href='/login'">Go to Login</button>
-</div>
+<form class="form" style="max-width: 620px; margin: 1rem auto; text-align: center;">
+  <h2 style="margin-bottom: 0.8rem;">{{ message }}</h2>
+  <a class="btn btn-primary" href="/login">Go to Login</a>
+</form>
 {% endblock %}

@@ -101,18 +101,38 @@ CREATE TABLE IF NOT EXISTS app_config (
 
 CREATE TABLE IF NOT EXISTS coharas (
     id VARCHAR(20) PRIMARY KEY,
-    password VARCHAR(128) NOT NULL,
+    password VARCHAR(255) NOT NULL,
     name VARCHAR(1000) NOT NULL,
     nickname VARCHAR(255) UNIQUE NOT NULL,
     email VARCHAR(320) UNIQUE NOT NULL,
     phone VARCHAR(15) UNIQUE NOT NULL,
     github_token VARCHAR(255) NOT NULL,
+    github_token_hash CHAR(64) UNIQUE NOT NULL,
     email_token VARCHAR(255) UNIQUE NULL,
     admin_permission BOOLEAN DEFAULT 0,
     phone_verified BOOLEAN DEFAULT 0,
     email_verified BOOLEAN DEFAULT 0,
     github_verified BOOLEAN DEFAULT 0
 );
+
+CREATE INDEX IF NOT EXISTS idx_cve_vuln_published_cve
+    ON cve_vulnerabilities (published, cve_id);
+CREATE INDEX IF NOT EXISTS idx_cvss_metrics_severity_cve
+    ON cvss_metrics (base_severity, cve_id);
+CREATE INDEX IF NOT EXISTS idx_cvss_metrics_score_cve
+    ON cvss_metrics (base_score, cve_id);
+CREATE INDEX IF NOT EXISTS idx_cvss_metrics_vector_cve
+    ON cvss_metrics (attack_vector, cve_id);
+CREATE INDEX IF NOT EXISTS idx_cve_desc_cve_lang
+    ON cve_descriptions (cve_id, description_lang);
+CREATE INDEX IF NOT EXISTS idx_cve_tags_cve_tag
+    ON cve_tags (cve_id, tag);
+CREATE INDEX IF NOT EXISTS idx_cve_poc_created_id
+    ON cve_poc_sources (created_at, id);
+CREATE INDEX IF NOT EXISTS idx_cve_poc_source_id
+    ON cve_poc_sources (source_identifier, id);
+CREATE INDEX IF NOT EXISTS idx_cve_poc_cve_id
+    ON cve_poc_sources (cve_id);
 
 -- ============================================
 -- 초기 구성 데이터 (환경 설정)
@@ -124,7 +144,7 @@ VALUES
     ('CVE_INTERVAL_HOURS', '1'),
     ('CVE_MINUTE', '30'),
     ('CVE_INTERVAL', '10.0'),
-    ('RESEARCH_GITHUB_TOKEN', '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'),
+    ('RESEARCH_GITHUB_TOKEN', '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'),
     ('RESEARCH_START_YEAR', '1999'),
     ('RESEARCH_START_MONTH', '1'),
     ('RESEARCH_SCHEDULE_TIME', '09:00'),
@@ -137,3 +157,40 @@ VALUES
     ('RESEARCH_MAX_RETRIES', '3')
 ON DUPLICATE KEY UPDATE
     config_value = VALUES(config_value);
+
+-- ============================================
+-- Default admin account (created only once)
+-- id/password: admin / admin
+-- ============================================
+INSERT INTO coharas (
+    id,
+    password,
+    name,
+    nickname,
+    email,
+    phone,
+    github_token,
+    github_token_hash,
+    admin_permission,
+    phone_verified,
+    email_verified,
+    github_verified,
+    email_token
+)
+SELECT
+    'admin',
+    SHA2('admin', 512),
+    'Administrator',
+    'admin',
+    'admin@coharas.local',
+    '10000000000',
+    'admin-default-token',
+    SHA2('admin-default-token', 256),
+    1,
+    1,
+    1,
+    1,
+    NULL
+WHERE NOT EXISTS (
+    SELECT 1 FROM coharas WHERE id = 'admin'
+);

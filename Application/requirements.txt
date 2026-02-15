@@ -8,3 +8,4 @@ beautifulsoup4==4.12.3
 python-dotenv==1.0.1
 pdfkit==1.0.0
 gunicorn==21.2.0
+cryptography==44.0.2

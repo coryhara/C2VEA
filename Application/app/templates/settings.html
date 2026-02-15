@@ -1,26 +1,24 @@
 {% extends "base.html" %}
 {% block title %}App Settings{% endblock %}
-{% block header %}⚙️ App Settings{% endblock %}
+{% block header %}Application Settings{% endblock %}
 
 {% block content %}
-<div id="controls">
-  <button onclick="window.location.href='/'">🏠 Home</button>
-  <button onclick="window.location.href='/dashboard'">🛡️ CVE Analytics Dashboard</button>
-  <button onclick="window.location.href='/cves'">🐞 CVE List</button>
-  <button onclick="window.location.href='/pocs'">☄️ PoC List</button>
-  {% if session.admin_permission == 1 %}
-  <button onclick="window.location.href='/logs'">📝 Logs</button>
-  {% endif %}
-</div>
-
-<form action="/settings" method="POST">
+<form action="/settings" method="POST" class="settings-form">
   {% for key, value in settings.items() %}
-  <div class="row">
-    <label for="{{ key }}">{{ key }}:</label>
-    <input id="{{ key }}" type="text" name="{{ key }}" value="{{ value }}" placeholder="Enter {{ key }}" required />
+  <div class="settings-row">
+    <label for="{{ key }}">{{ key }}</label>
+    <input
+      id="{{ key }}"
+      type="text"
+      name="{{ key }}"
+      value="{{ value }}"
+      placeholder="Enter {{ key }}"
+      {% if "TOKEN" in key %}autocomplete="off" spellcheck="false"{% endif %}
+      required
+    />
   </div>
   {% endfor %}
-  <div class="row" style="justify-content: flex-end">
+  <div class="settings-actions">
     <button type="submit">Save</button>
   </div>
 </form>

@@ -2,53 +2,213 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>{% block title %}{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Coharas{% endblock %}</title>
 
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <script
       src="https://cdn.socket.io/4.7.5/socket.io.min.js"
       crossorigin="anonymous"
     ></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+    <style>
+      /* Ultra-Modern / Sophisticated Glassmorphism Theme */
+      :root {
+        --bg-deep: #050507;
+        --bg-glass: rgba(20, 21, 26, 0.65);
+        --border-glass: rgba(255, 255, 255, 0.08);
+        --primary: #00f3ff; /* Electric Cyan */
+        --primary-glow: rgba(0, 243, 255, 0.4);
+        --secondary: #7000ff; /* Deep Violet */
+        --accent: #ff0055; /* Neon Pink */
+        --text-main: #ffffff;
+        --text-muted: #94a3b8;
+        --font-display: 'Space Grotesk', sans-serif;
+        --font-mono: 'Manrope', sans-serif; /* Cleaner than Courier */
+        --ease-smooth: cubic-bezier(0.23, 1, 0.32, 1);
+      }
 
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+      body {
+        background-color: var(--bg-deep);
+        color: var(--text-main);
+        font-family: var(--font-mono);
+        min-height: 100vh;
+        position: relative;
+        overflow-x: hidden;
+        /* Dynamic Ambient Background */
+        background: radial-gradient(circle at 0% 0%, rgba(112, 0, 255, 0.15), transparent 40%),
+                    radial-gradient(circle at 100% 100%, rgba(0, 243, 255, 0.1), transparent 40%);
+        background-attachment: fixed;
+      }
+
+      /* Subtle Noise Texture for Premium Feel */
+      body::before {
+        content: "";
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
+        pointer-events: none;
+        z-index: -1;
+      }
+
+      /* Glass Panels */
+      .topbar, .menubar, .page-panel, .card, .feature-card {
+        background: var(--bg-glass) !important;
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        border: 1px solid var(--border-glass) !important;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        border-radius: 16px; /* Modern rounded corners */
+      }
+
+      .topbar { border-bottom: 1px solid var(--border-glass) !important; }
+      .menubar { border-right: 1px solid var(--border-glass) !important; }
+
+      /* Brand */
+      .brand-badge {
+        background: linear-gradient(135deg, var(--primary), var(--secondary)) !important;
+        color: #fff !important;
+        font-weight: 800;
+        box-shadow: 0 0 15px var(--primary-glow);
+        border-radius: 8px;
+      }
+      .brand-text strong { 
+        background: linear-gradient(90deg, #fff, var(--primary));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-family: var(--font-display);
+        letter-spacing: -0.5px;
+      }
+      .brand-text small { color: var(--text-muted); }
+
+      a { color: var(--primary); text-decoration: none; transition: all 0.2s; }
+      a:hover { color: #fff; text-shadow: 0 0 8px var(--primary-glow); }
+
+      /* Navigation */
+      .menu-link { 
+        color: var(--text-muted); 
+        border-left: none; 
+        border-radius: 8px;
+        margin: 4px 8px;
+        transition: all 0.3s var(--ease-smooth);
+        position: relative;
+        overflow: hidden;
+      }
+      .menu-link:hover, .menu-link.active {
+        color: #fff;
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .menu-link.active::before {
+        content: '';
+        position: absolute;
+        left: 0; top: 0; bottom: 0; width: 3px;
+        background: var(--primary);
+        box-shadow: 0 0 10px var(--primary);
+      }
+
+      /* Buttons & Inputs */
+      .btn {
+        border-radius: 8px !important;
+        font-family: var(--font-display);
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        transition: all 0.3s var(--ease-smooth);
+        text-transform: none;
+      }
+      .btn-primary {
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        color: #fff;
+        border: none;
+        box-shadow: 0 4px 15px rgba(0, 243, 255, 0.2);
+      }
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0, 243, 255, 0.4);
+        color: #fff;
+      }
+      .btn-outline { border-color: var(--border-glass); color: var(--text-main); }
+      .btn-outline:hover { border-color: var(--primary); color: var(--primary); background: rgba(0, 243, 255, 0.05); }
+
+      input, select, textarea {
+        background: rgba(0, 0, 0, 0.3) !important;
+        border: 1px solid var(--border-glass) !important;
+        color: #fff !important;
+        border-radius: 8px !important;
+        font-family: var(--font-mono);
+        transition: all 0.3s ease;
+      }
+      input:focus {
+        border-color: var(--primary) !important;
+        box-shadow: 0 0 0 2px rgba(0, 243, 255, 0.1);
+      }
+      
+      /* Tables */
+      th { background: transparent !important; color: var(--text-muted) !important; border-bottom: 1px solid var(--border-glass) !important; font-weight: 600; }
+      td { border-bottom: 1px solid rgba(255,255,255,0.03) !important; }
+      tr:hover td { background: rgba(255, 255, 255, 0.03); color: #fff; }
+    </style>
     {% block head %}{% endblock %}
   </head>
 
   <body>
-    <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-      <h1>{% block header %}{% endblock %}</h1>
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-badge">C</span>
+        <span class="brand-text">
+          <strong>Coharas</strong>
+          <small>Vulnerability Intelligence</small>
+        </span>
+      </a>
 
-      <div id="user-info" style="text-align:right;">
+      <div class="topbar-actions">
         {% if session.nickname %}
-          <span style="color:#8de0d6;">👤 {{ session.nickname }}</span>
-          <button id="logoutBtn" style="margin-left:1rem;">Logout</button>
+          <span class="welcome-text">{{ session.nickname }}</span>
+          <button id="logoutBtn" class="btn btn-outline" type="button">Logout</button>
         {% else %}
-          <button onclick="window.location.href='/login'">Login</button>
-          <button onclick="window.location.href='/signup'">Sign Up</button>
+          <a class="btn btn-ghost" href="/login">Login</a>
+          <a class="btn btn-primary" href="/signup">Sign Up</a>
         {% endif %}
       </div>
     </header>
 
-    <main>
-      {% block content %}{% endblock %}
+    <nav class="menubar">
+      <a class="menu-link {% if request.path == '/' %}active{% endif %}" href="/">Home</a>
+      {% if session.nickname %}
+        <a class="menu-link {% if request.path.startswith('/dashboard') %}active{% endif %}" href="/dashboard">Dashboard</a>
+        <a class="menu-link {% if request.path.startswith('/cves') %}active{% endif %}" href="/cves">CVEs</a>
+        <a class="menu-link {% if request.path.startswith('/pocs') or request.path.startswith('/poc/') %}active{% endif %}" href="/pocs">PoCs</a>
+        {% if session.admin_permission == 1 %}
+          <a class="menu-link {% if request.path.startswith('/logs') %}active{% endif %}" href="/logs">Logs</a>
+          <a class="menu-link {% if request.path.startswith('/settings') %}active{% endif %}" href="/settings">Settings</a>
+        {% endif %}
+      {% endif %}
+    </nav>
+
+    <main class="page-shell">
+      <section class="page-panel">
+        {% if self.header() %}
+          <div class="page-header">
+            <h1>{% block header %}{% endblock %}</h1>
+          </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+      </section>
     </main>
 
-    <footer style="margin-top:2rem; text-align:center; font-size:0.9rem; color:#888;">
-      <p>© 2025 Coryhara Security Platform</p>
-    </footer>
+    <div id="alerts" class="toast-stack"></div>
 
     {% block scripts %}
     <script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
-
     <script>
-      {% if session.user_id %}
-      const socket = io("{{ ALLOWED_ORIGINS }}", {
+      {% if session.nickname %}
+      const socket = io({
         path: "/socket.io/",
-        transports: ["websocket"],
-      });
-
-      socket.on("connect", () => {
-        console.log("✅ Socket connected:", socket.id);
-        socket.emit("subscribe_logs", { last_id: 0 });
+        transports: ["websocket", "polling"],
       });
 
       socket.on("notify", (msg) => {

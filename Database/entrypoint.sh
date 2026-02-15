@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/bin/sh
 
-echo "🔧 Setting permissions for /var/lib/mysql"
+echo "Setting permissions for /var/lib/mysql"
 chown -R 999:999 /var/lib/mysql
 chmod -R 755 /var/lib/mysql
 

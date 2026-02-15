@@ -1,168 +1,43 @@
 {% extends "base.html" %}
-{% block title %}Coharas — CVE & PoC Intelligence Platform{% endblock %}
-{% block header %}{% endblock %}
+{% block title %}Coharas | CVE & PoC Intelligence{% endblock %}
+{% block header %}Threat Intelligence Workspace{% endblock %}
 
 {% block content %}
-<section class="hero fade-in">
-  <h1>Track. Analyze. Respond.</h1>
+<section class="hero">
+  <h1>Track vulnerabilities with practical exploit context.</h1>
   <p>
-    Coharas automatically collects and analyzes global <strong>CVE</strong> data, 
-    maps <strong>public PoCs</strong>, and visualizes emerging threats — 
-    empowering faster, data-driven vulnerability response.
+    Coharas continuously ingests NVD CVE feeds, correlates public PoC sources,
+    and gives your team one consistent place to monitor risk signals.
   </p>
 </section>
 
 <section class="features">
-  <div class="feature-card slide-up">
-    <h3>⚙️ Automated Ingestion</h3>
+  <article class="feature-card">
+    <h3>Automated Ingestion</h3>
     <p>
-      Collects CVEs and PoCs from NVD, GitHub, and other sources using scheduled collectors.<br>
-      <span class="highlight">Advantage:</span> Always up-to-date with zero manual input.
+      Scheduled collectors keep CVE and PoC data fresh without manual pulling.
     </p>
-  </div>
-
-  <div class="feature-card slide-up-delay">
-    <h3>🚀 PoC Mapping & Intelligence</h3>
+  </article>
+  <article class="feature-card">
+    <h3>PoC Correlation</h3>
     <p>
-      Detects, hashes, and links exploit sources to CVEs for verification.<br>
-      <span class="highlight">Advantage:</span> Instantly see which vulnerabilities have working PoCs.
+      Connect exploit artifacts to CVEs so analysts can prioritize by exploitability.
     </p>
-  </div>
-
-  <div class="feature-card slide-up-delay2">
-    <h3>📊 Real-time Dashboard</h3>
+  </article>
+  <article class="feature-card">
+    <h3>Operational Visibility</h3>
     <p>
-      Aggregates and visualizes CVE metrics, PoC coverage, and trend analytics.<br>
-      <span class="highlight">Advantage:</span> Stay focused on what matters most, in real time.
+      Dashboard, list views, and logs align engineering and security workflows.
     </p>
-  </div>
+  </article>
 </section>
 
-<section class="roadmap slide-up">
-  <h2>🚀 Roadmap</h2>
+<section class="roadmap">
+  <h2>Planned Enhancements</h2>
   <ul>
-    <li>🔍 Integrate vendor advisories and bug bounty feeds</li>
-    <li>🤖 Add ML-based PoC classification</li>
-    <li>📈 Historical trends & automated risk scoring</li>
-    <li>🔔 Multi-channel alerts (Email, Slack, Webhook)</li>
+    <li>Vendor advisory synchronization and signal scoring</li>
+    <li>PoC quality classification with model-assisted ranking</li>
+    <li>Team notification channels for risk spikes</li>
   </ul>
 </section>
-{% endblock %}
-
-{% block head %}
-<style>
-/* ====== GLOBAL ====== */
-body {
-  text-align: center;
-  margin: 0;
-  background-color: #0e0e0e;
-  color: #e5e5e5;
-  font-family: 'Inter', 'Segoe UI', sans-serif;
-}
-
-/* ====== HERO SECTION ====== */
-.hero {
-  margin: 6rem auto 3rem;
-  max-width: 800px;
-  padding: 0 1rem;
-}
-.hero h1 {
-  font-size: 2.8rem;
-  color: #8de0d6;
-  margin-bottom: 1.2rem;
-}
-.hero p {
-  font-size: 1.1rem;
-  line-height: 1.7;
-  color: #cfcfcf;
-}
-
-/* ====== FEATURE CARDS ====== */
-.features {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 2rem;
-  margin: 4rem auto;
-  max-width: 1000px;
-  padding: 0 1rem;
-}
-
-.feature-card {
-  background: linear-gradient(180deg, #1b1b1b, #161616);
-  border-radius: 12px;
-  padding: 2rem;
-  width: 300px;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.6);
-  text-align: left;
-  transition: all 0.3s ease;
-  border: 1px solid #252525;
-}
-.feature-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.7);
-  border-color: #5aaba2;
-}
-.feature-card h3 {
-  text-align: center;
-  color: #74cfc5;
-  margin-bottom: 0.8rem;
-}
-.feature-card p {
-  color: #bcbcbc;
-  font-size: 0.95rem;
-  line-height: 1.6;
-}
-.highlight {
-  color: #8de0d6;
-  font-weight: bold;
-}
-
-/* ====== ROADMAP ====== */
-.roadmap {
-  margin: 5rem auto 3rem;
-  max-width: 700px;
-  text-align: left;
-  background: #141414;
-  padding: 2rem 2.5rem;
-  border-radius: 14px;
-  border: 1px solid #202020;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-}
-.roadmap h2 {
-  text-align: center;
-  color: #8de0d6;
-  margin-bottom: 1rem;
-}
-.roadmap ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.roadmap li {
-  margin: 0.6rem 0;
-  font-size: 1rem;
-  color: #d0d0d0;
-  line-height: 1.6;
-}
-
-/* ====== FOOTER ====== */
-.footer {
-  margin: 4rem 0 2rem;
-  color: #666;
-  font-size: 0.9rem;
-}
-
-/* ====== ANIMATIONS ====== */
-.fade-in { opacity: 0; animation: fadeIn 1.2s ease forwards; }
-.slide-up { opacity: 0; transform: translateY(40px); animation: slideUp 1s ease-out forwards; }
-.slide-up-delay { opacity: 0; transform: translateY(40px); animation: slideUp 1s ease-out 0.3s forwards; }
-.slide-up-delay2 { opacity: 0; transform: translateY(40px); animation: slideUp 1s ease-out 0.6s forwards; }
-
-@keyframes fadeIn { from {opacity: 0;} to {opacity: 1;} }
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(40px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-</style>
 {% endblock %}

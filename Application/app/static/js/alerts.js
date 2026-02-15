@@ -1,6 +1,7 @@
 const alerts = document.getElementById("alerts");
 
 function showAlert(message) {
+  if (!alerts) return;
   const div = document.createElement("div");
   div.textContent = message;
   alerts.prepend(div);

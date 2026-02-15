@@ -1,34 +1,102 @@
-from flask import Blueprint, render_template, request, redirect, jsonify, send_file, abort
-from werkzeug.utils import secure_filename
-from pathlib import Path
+import ipaddress
+import json
+import os
+import socket
 from datetime import datetime
-import os, json, pdfkit
+from pathlib import Path
+from urllib.parse import urlparse
+
+import pdfkit
+from flask import Blueprint, jsonify, redirect, render_template, request, send_file
+from werkzeug.utils import secure_filename
+
 from app import socketio
 from app.db import get_conn, get_cursor
-from app.utils.decorators import (
-    login_required,
-    email_verified_required,
-    github_verified_required,
-    phone_verified_required,
-    admin_required,
-)
-
+from app.utils.decorators import admin_required, email_verified_required, login_required
 
 poc_bp = Blueprint("poc", __name__)
 
-# =========================
-# 페이지 라우트
-# =========================
+
+def _notify(type_: str, label: str, message: str):
+    socketio.emit("notify", {"type": type_, "label": label, "message": message})
+
+
+def _get_allowlisted_hosts():
+    raw = os.getenv("POC_URL_ALLOWLIST", "")
+    return [h.strip().lower() for h in raw.replace(";", ",").split(",") if h.strip()]
+
+
+def _is_host_allowlisted(hostname: str, allowlist: list[str]) -> bool:
+    if not allowlist:
+        return True
+    host = hostname.lower()
+    return any(host == allowed or host.endswith(f".{allowed}") for allowed in allowlist)
+
+
+def _validate_public_url(url: str) -> str | None:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return "Only http/https URLs are allowed."
+
+    hostname = (parsed.hostname or "").strip().lower()
+    if not hostname:
+        return "URL hostname is required."
+    if hostname in {"localhost", "127.0.0.1", "::1"}:
+        return "Localhost URLs are not allowed."
+    if not _is_host_allowlisted(hostname, _get_allowlisted_hosts()):
+        return "URL hostname is not in the allowlist."
+
+    try:
+        infos = socket.getaddrinfo(hostname, parsed.port or 80, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return "URL hostname could not be resolved."
+
+    for info in infos:
+        ip_str = info[4][0]
+        ip = ipaddress.ip_address(ip_str)
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            return "Private or local network addresses are not allowed."
+
+    return None
+
+
+def _resolve_download_path(raw_path: str) -> Path:
+    base_dir = Path(os.getenv("POC_SAVE_DIR", "/app/poc_sources")).resolve()
+    candidate = Path(raw_path)
+
+    # Fix for paths stored as relative starting with ./poc_sources/ or poc_sources/
+    # This prevents path duplication (e.g., /app/poc_sources/poc_sources/...)
+    parts = candidate.parts
+    if len(parts) > 0 and parts[0] == ".":
+        parts = parts[1:]
+    if len(parts) > 0 and parts[0] == "poc_sources":
+        parts = parts[1:]
+    candidate = Path(*parts)
+
+    if not candidate.is_absolute():
+        candidate = (base_dir / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+
+    if os.path.commonpath([str(candidate), str(base_dir)]) != str(base_dir):
+        raise ValueError("Invalid file path.")
+    return candidate
+
+
 @poc_bp.get("/pocs")
 @login_required
 @email_verified_required
 def poc_page():
-    return render_template("pocs.html")   # ✅ PoC 리스트 페이지
+    return render_template("pocs.html")
 
 
-# =========================
-# PoC 업로드
-# =========================
 @poc_bp.get("/poc/upload")
 @login_required
 @email_verified_required
@@ -48,81 +116,89 @@ def poc_upload():
     poc_file = request.files.get("poc_file")
 
     if not cve_id or not source_id:
-        _notify("error", "PoC", "⚠️ CVE ID와 Source Identifier는 필수입니다.")
+        _notify("error", "PoC", "CVE ID and Source Identifier are required.")
         return render_template("poc_form.html", cve_id=cve_id, source_identifier=source_id)
 
-    base_dir = Path(os.getenv("POC_SAVE_DIR", "/tmp/poc_sources"))
+    base_dir = Path(os.getenv("POC_SAVE_DIR", "/app/poc_sources"))
     upload_time = datetime.now().strftime("%Y%m%d_%H%M%S")
     upload_dir = base_dir / upload_time
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     wkhtmltopdf = os.getenv("WKHTMLTOPDF_CMD")
     pdfkit_config = pdfkit.configuration(wkhtmltopdf=wkhtmltopdf) if wkhtmltopdf else None
-
     downloaded_files = []
 
-    conn, cur = get_conn(), None
+    conn = get_conn()
+    cur = None
     try:
         cur = get_cursor(conn)
 
         if poc_url:
+            error = _validate_public_url(poc_url)
+            if error:
+                _notify("error", "PoC", error)
+                return render_template("poc_form.html", cve_id=cve_id, source_identifier=source_id)
+
             pdf_path = upload_dir / f"{secure_filename(cve_id)}_poc.pdf"
             pdfkit.from_url(poc_url, str(pdf_path), configuration=pdfkit_config)
             downloaded_files.append(str(pdf_path))
 
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO cve_poc_sources (cve_id, source_identifier, url, downloaded_files)
                 VALUES (%s, %s, %s, %s)
-            """, (cve_id, source_id, poc_url, json.dumps(downloaded_files)))
-
+                """,
+                (cve_id, source_id, poc_url, json.dumps(downloaded_files))
+            )
         elif poc_file and poc_file.filename:
             filename = secure_filename(poc_file.filename)
             file_path = upload_dir / filename
             poc_file.save(file_path)
             downloaded_files.append(str(file_path))
 
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO cve_poc_sources (cve_id, source_identifier, downloaded_files)
                 VALUES (%s, %s, %s)
-            """, (cve_id, source_id, json.dumps(downloaded_files)))
-
+                """,
+                (cve_id, source_id, json.dumps(downloaded_files))
+            )
         else:
-            _notify("error", "PoC", "⚠️ URL 또는 파일 중 하나를 입력하세요.")
+            _notify("error", "PoC", "Provide either PoC URL or PoC file.")
             return render_template("poc_form.html", cve_id=cve_id, source_identifier=source_id)
 
-        # 로그 기록
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO logs (status, message)
             VALUES (%s, %s)
-        """, ("INFO", f"PoC for {cve_id} saved from {source_id} at {upload_time}"))
+            """,
+            ("INFO", f"PoC for {cve_id} saved from {source_id} at {upload_time}")
+        )
 
         conn.commit()
-        _notify("success", "PoC", f"✅ PoC for {cve_id} saved successfully")
+        _notify("success", "PoC", f"PoC for {cve_id} saved successfully")
         return redirect("/")
-
     except Exception as e:
         conn.rollback()
-        _notify("error", "PoC", f"❌ 저장 실패: {e}")
+        _notify("error", "PoC", f"Save failed: {e}")
         return render_template("poc_form.html", cve_id=cve_id, source_identifier=source_id)
-
     finally:
         if cur:
             cur.close()
         conn.close()
 
 
-# =========================
-# 다운로드 기능 추가
-# =========================
 @poc_bp.get("/poc/download/<int:poc_id>")
 @login_required
 @email_verified_required
 def poc_download(poc_id):
     conn = get_conn()
-    with get_cursor(conn) as cur:
-        cur.execute("SELECT downloaded_files FROM cve_poc_sources WHERE id=%s", (poc_id,))
-        row = cur.fetchone()
-    conn.close()
+    try:
+        with get_cursor(conn) as cur:
+            cur.execute("SELECT downloaded_files FROM cve_poc_sources WHERE id=%s", (poc_id,))
+            row = cur.fetchone()
+    finally:
+        conn.close()
 
     if not row:
         return jsonify({"error": "PoC not found"}), 404
@@ -138,28 +214,23 @@ def poc_download(poc_id):
         else:
             file_path = first_item
 
-        # ✅ 절대 경로 보정
-        if not os.path.isabs(file_path):
-            base_dir = os.getenv("POC_SAVE_DIR", "/app/poc_sources")  # 실제 파일 저장 루트
-            file_path = os.path.join(base_dir, os.path.relpath(file_path, "./poc_sources"))
+        resolved = _resolve_download_path(file_path)
+        if not resolved.exists():
+            return jsonify({"error": f"File not found on server: {resolved}"}), 404
 
-        if not os.path.exists(file_path):
-            return jsonify({"error": f"File not found on server: {file_path}"}), 404
-
-        return send_file(file_path, as_attachment=True)
+        return send_file(str(resolved), as_attachment=True)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 403
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
-# =========================
-# PoC 리스트 API
-# =========================
 @poc_bp.get("/api/pocs")
 @login_required
 @email_verified_required
 def api_pocs():
     args = request.args
-    page = int(args.get("page", 1))
+    page = max(int(args.get("page", 1)), 1)
     size = 100
     offset = (page - 1) * size
 
@@ -181,7 +252,6 @@ def api_pocs():
     if conditions:
         base_query += " AND " + " AND ".join(conditions)
 
-    # ✅ downloaded_files 컬럼 추가
     data_query = f"""
         SELECT id, cve_id, source_identifier, url, created_at, downloaded_files
         {base_query}
@@ -196,7 +266,6 @@ def api_pocs():
 
     data_query += f" ORDER BY {sort} {order} LIMIT %s OFFSET %s"
     params_data = params + [size, offset]
-
     count_query = f"SELECT COUNT(*) AS total {base_query}"
 
     with get_conn() as conn, get_cursor(conn) as cur:
@@ -206,12 +275,11 @@ def api_pocs():
         cur.execute(count_query, params)
         total = cur.fetchone()["total"]
 
-    # ✅ downloaded_files를 JSON 문자열로 안전하게 직렬화
-    for r in rows:
-        if isinstance(r.get("downloaded_files"), (list, dict)):
-            r["downloaded_files"] = json.dumps(r["downloaded_files"])
-        elif r.get("downloaded_files") is None:
-            r["downloaded_files"] = "[]"
+    for row in rows:
+        if isinstance(row.get("downloaded_files"), (list, dict)):
+            row["downloaded_files"] = json.dumps(row["downloaded_files"])
+        elif row.get("downloaded_files") is None:
+            row["downloaded_files"] = "[]"
 
     return jsonify({
         "page": page,
@@ -222,25 +290,22 @@ def api_pocs():
     })
 
 
-# =========================
-# 소스 통계
-# =========================
 @poc_bp.get("/api/cve/poc-sources")
 @login_required
 @email_verified_required
 def cve_poc_sources():
     conn = get_conn()
-    with get_cursor(conn) as cur:
-        cur.execute("""
-            SELECT source_identifier, COUNT(*) AS count
-            FROM cve_poc_sources
-            GROUP BY source_identifier
-            ORDER BY count DESC
-        """)
-        rows = cur.fetchall()
-    conn.close()
+    try:
+        with get_cursor(conn) as cur:
+            cur.execute(
+                """
+                SELECT source_identifier, COUNT(*) AS count
+                FROM cve_poc_sources
+                GROUP BY source_identifier
+                ORDER BY count DESC
+                """
+            )
+            rows = cur.fetchall()
+    finally:
+        conn.close()
     return jsonify(rows)
-
-
-def _notify(type_: str, label: str, message: str):
-    socketio.emit("notify", {"type": type_, "label": label, "message": message})

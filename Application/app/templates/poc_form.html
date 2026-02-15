@@ -1,42 +1,31 @@
 {% extends "base.html" %}
 {% block title %}PoC Upload{% endblock %}
-{% block header %}📝 PoC Upload{% endblock %}
+{% block header %}PoC Upload{% endblock %}
 
 {% block content %}
-<div id="controls">
-  <button onclick="window.location.href='/'">🏠 Home</button>
-  <button onclick="window.location.href='/dashboard'">🛡️ CVE Analytics Dashboard</button>
-  <button onclick="window.location.href='/cves'">🐞 CVE List</button>
-  <button onclick="window.location.href='/pocs'">☄️ PoC List</button>
-  {% if session.admin_permission == 1 %}
-  <button onclick="window.location.href='/logs'">📝 Logs</button>
-  <button onclick="window.location.href='/settings'">⚙️ Settings</button>
-  {% endif %}
-</div>
-
 <form action="/poc/upload" method="POST" enctype="multipart/form-data">
   <div class="row">
-    <label for="cve_id">CVE ID:</label>
+    <label for="cve_id">CVE ID</label>
     <input id="cve_id" type="text" name="cve_id" placeholder="e.g. CVE-2025-12345" required />
   </div>
 
   <div class="row">
-    <label for="source_identifier">Source Identifier:</label>
+    <label for="source_identifier">Source Identifier</label>
     <input id="source_identifier" type="text" name="source_identifier"
-      placeholder="e.g. Exploit-DB / PacketStorm / ResearchNote" required />
+      placeholder="e.g. Exploit-DB / PacketStorm / Research Note" required />
   </div>
 
   <div class="row">
-    <label for="poc_url">PoC URL:</label>
+    <label for="poc_url">PoC URL</label>
     <input id="poc_url" type="url" name="poc_url" placeholder="https://example.com/poc" />
   </div>
 
   <div class="row">
-    <label for="poc_file">Upload File:</label>
+    <label for="poc_file">Upload File</label>
     <input id="poc_file" type="file" name="poc_file" />
   </div>
 
-  <div class="row" style="justify-content: flex-end">
+  <div class="row" style="justify-content: flex-end;">
     <button type="submit">Save</button>
   </div>
 </form>

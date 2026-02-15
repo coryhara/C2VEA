@@ -1,18 +1,8 @@
 {% extends "base.html" %}
 {% block title %}PoC List{% endblock %}
-{% block header %}☄️ PoC List{% endblock %}
+{% block header %}PoC List{% endblock %}
 
 {% block content %}
-<div id="controls">
-  <button onclick="window.location.href='/'">🏠 Home</button>
-  <button onclick="window.location.href='/dashboard'">🛡️ CVE Analytics Dashboard</button>
-  <button onclick="window.location.href='/cves'">🐞 CVE List</button>
-  {% if session.admin_permission == 1 %}
-  <button onclick="window.location.href='/logs'">📝 Logs</button>
-  <button onclick="window.location.href='/settings'">⚙️ Settings</button>
-  {% endif %}
-</div>
-
 <form id="pocFilterForm" class="filter-form">
   <div class="filter-row">
     <select name="search_type">
@@ -20,7 +10,7 @@
       <option value="source">Source</option>
       <option value="author">Author</option>
     </select>
-    <input type="text" name="keyword" placeholder="🔍 Search keyword">
+    <input type="text" name="keyword" placeholder="Search keyword">
   </div>
   <div class="filter-actions">
     <button type="submit">Search</button>
@@ -29,25 +19,27 @@
 
 <div id="pagination-top"></div>
 
-<table id="pocTable" class="styled-table">
-  <thead>
-    <tr>
-      <th><button onclick="setSort('id')" id="sort-id">ID <span class="sort-icon"></span></button></th>
-      <th><button onclick="setSort('cve_id')" id="sort-cve">CVE <span class="sort-icon"></span></button></th>
-      <th><button onclick="setSort('source_identifier')" id="sort-source">Source <span class="sort-icon"></span></button></th>
-      <th><button onclick="setSort('url')" id="sort-url">URL <span class="sort-icon"></span></button></th>
-      <th><button onclick="setSort('created_at')" id="sort-created">Created <span class="sort-icon"></span></button></th>
-      <th>File</th> <!-- ✅ 자연스럽게 이름 변경 -->
-    </tr>
-  </thead>
-  <tbody></tbody>
-</table>
+<div class="table-wrap">
+  <table id="pocTable" class="styled-table">
+    <thead>
+      <tr>
+        <th><button onclick="setSort('id')" id="sort-id">ID <span class="sort-icon"></span></button></th>
+        <th><button onclick="setSort('cve_id')" id="sort-cve">CVE <span class="sort-icon"></span></button></th>
+        <th><button onclick="setSort('source_identifier')" id="sort-source">Source <span class="sort-icon"></span></button></th>
+        <th><button onclick="setSort('url')" id="sort-url">URL <span class="sort-icon"></span></button></th>
+        <th><button onclick="setSort('created_at')" id="sort-created">Created <span class="sort-icon"></span></button></th>
+        <th>File</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
 
 <div id="pagination-bottom"></div>
 
 {% if session.admin_permission == 1 %}
 <div style="margin-top: 10px;">
-  <a href="/poc/upload"><button>➕ Add PoC</button></a>
+  <a href="/poc/upload"><button type="button">Add PoC</button></a>
 </div>
 {% endif %}
 
@@ -108,15 +100,15 @@ function loadPOC(page=1, filters={}) {
         catch { files = []; }
 
         const downloadLink = files.length
-          ? `<a href="/poc/download/${r.id}" class="link-btn" title="Download">⬇️ Download</a>`
-          : "<span style='color:#777;'>—</span>";
+          ? `<a href="/poc/download/${r.id}" class="link-btn" title="Download">Download</a>`
+          : "<span style='color:#9cb9dd;'>-</span>";
 
         tbody.innerHTML += `
           <tr>
             <td>${r.id}</td>
             <td>${escapeHTML(r.cve_id)}</td>
             <td>${escapeHTML(r.source_identifier)}</td>
-            <td>${r.url ? `<a href="${escapeHTML(r.url)}" target="_blank" class="link-btn">🌐 ${escapeHTML(r.url)}</a>` : ""}</td>
+            <td>${r.url ? `<a href="${escapeHTML(r.url)}" target="_blank" class="link-btn">${escapeHTML(r.url)}</a>` : ""}</td>
             <td>${escapeHTML(r.created_at)}</td>
             <td>${downloadLink}</td>
           </tr>`;
@@ -151,27 +143,4 @@ document.getElementById("pocFilterForm").onsubmit = e => {
 
 loadPOC(1);
 </script>
-
-<style>
-/* 원래 버튼 스타일에 자연스럽게 녹아들도록 */
-.link-btn {
-  color: #4da6ff;
-  text-decoration: none;
-}
-.link-btn:hover {
-  text-decoration: underline;
-}
-
-/* 다운로드 버튼 스타일을 기존 버튼 톤에 맞춤 */
-.link-btn.download {
-  color: #9ef0ff;
-}
-
-/* 페이지 버튼 강조 */
-button.active-page {
-  background-color: #2d2d2d;
-  font-weight: bold;
-  border: 1px solid #666;
-}
-</style>
 {% endblock %}

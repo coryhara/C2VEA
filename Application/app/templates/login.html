@@ -1,30 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Login{% endblock %}
-{% block header %}🔐 Login{% endblock %}
+{% block header %}Login{% endblock %}
 
 {% block content %}
-<div id="controls">
-  <button onclick="window.location.href='/'">🏠 Home</button>
-</div>
-
 <form id="loginForm" class="form" onsubmit="return false;">
   <div class="row">
-    <label for="id">User ID:</label>
-    <input id="id" name="id" type="text" placeholder="Enter your ID" required />
+    <label for="id">User ID</label>
+    <input id="id" name="id" type="text" placeholder="Enter your user ID" required />
   </div>
 
   <div class="row">
-    <label for="password">Password:</label>
+    <label for="password">Password</label>
     <input id="password" name="password" type="password" placeholder="Enter your password" required />
   </div>
 
   <div class="row" style="justify-content: space-between; align-items: center;">
-    <div>
-      <a href="/signup">Don’t have an account? Sign up</a>
-    </div>
-    <div>
-      <button id="loginBtn" type="button">Log In</button>
-    </div>
+    <a href="/signup">Need an account? Sign up</a>
+    <button id="loginBtn" type="button">Log In</button>
   </div>
 
   <div class="row">
@@ -51,8 +43,11 @@ document.getElementById("loginBtn").addEventListener("click", async () => {
   const json = await res.json();
   document.getElementById("result").innerText = json.message || "Login failed.";
 
-  if (json.status === "success")
-    setTimeout(() => window.location.href = "/dashboard", 800);
+  if (json.status === "success") {
+    setTimeout(() => {
+      window.location.href = "/dashboard";
+    }, 500);
+  }
 });
 </script>
 {% endblock %}
