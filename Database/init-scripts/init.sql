@@ -94,11 +94,42 @@ CREATE TABLE IF NOT EXISTS cve_poc_sources (
     FOREIGN KEY (cve_id) REFERENCES cve_vulnerabilities (cve_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS cve_list_meta (
+    cve_id VARCHAR(50) PRIMARY KEY,
+    description_value MEDIUMTEXT NULL,
+    description_sort VARCHAR(512) NULL,
+    description_sort_key VARCHAR(191) NULL,
+    base_score DOUBLE NULL,
+    base_severity VARCHAR(20) NULL,
+    attack_vector VARCHAR(20) NULL,
+    tags TEXT NULL,
+    tags_sort VARCHAR(512) NULL,
+    tags_sort_key VARCHAR(191) NULL,
+    has_poc TINYINT(1) NOT NULL DEFAULT 0,
+    epss_score DOUBLE NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (cve_id) REFERENCES cve_vulnerabilities (cve_id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS logs (
     id SERIAL PRIMARY KEY,
     status TEXT,
     message TEXT,
     log_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS job_progress (
+    job_key VARCHAR(100) PRIMARY KEY,
+    job_type VARCHAR(60) NOT NULL,
+    job_label VARCHAR(120) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    progress_percent DECIMAL(6,2) NOT NULL DEFAULT 0,
+    current_step BIGINT NOT NULL DEFAULT 0,
+    total_steps BIGINT NOT NULL DEFAULT 0,
+    detail VARCHAR(255) NULL,
+    started_at TIMESTAMP NULL,
+    finished_at TIMESTAMP NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS app_config (
@@ -132,8 +163,14 @@ CREATE INDEX IF NOT EXISTS idx_cvss_metrics_score_cve
     ON cvss_metrics (base_score, cve_id);
 CREATE INDEX IF NOT EXISTS idx_cvss_metrics_vector_cve
     ON cvss_metrics (attack_vector, cve_id);
+CREATE INDEX IF NOT EXISTS idx_cvss_metrics_cve_score
+    ON cvss_metrics (cve_id, base_score);
+CREATE INDEX IF NOT EXISTS idx_cvss_metrics_cve_score_id
+    ON cvss_metrics (cve_id, base_score, id);
 CREATE INDEX IF NOT EXISTS idx_cve_desc_cve_lang
     ON cve_descriptions (cve_id, description_lang);
+CREATE INDEX IF NOT EXISTS idx_cve_desc_cve_lang_id
+    ON cve_descriptions (cve_id, description_lang, id);
 CREATE INDEX IF NOT EXISTS idx_cve_tags_cve_tag
     ON cve_tags (cve_id, tag);
 CREATE INDEX IF NOT EXISTS idx_cve_poc_created_id
@@ -142,8 +179,34 @@ CREATE INDEX IF NOT EXISTS idx_cve_poc_source_id
     ON cve_poc_sources (source_identifier, id);
 CREATE INDEX IF NOT EXISTS idx_cve_poc_cve_id
     ON cve_poc_sources (cve_id);
+CREATE INDEX IF NOT EXISTS idx_cve_poc_cve_id_id
+    ON cve_poc_sources (cve_id, id);
+CREATE INDEX IF NOT EXISTS idx_cve_poc_source_identifier_id
+    ON cve_poc_sources (source_identifier, id);
+CREATE INDEX IF NOT EXISTS idx_cve_poc_url_id
+    ON cve_poc_sources (url(191), id);
 CREATE INDEX IF NOT EXISTS idx_cve_epss_score
     ON cve_epss (epss_score);
+CREATE INDEX IF NOT EXISTS idx_job_progress_status_updated
+    ON job_progress (status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_cve_list_meta_desc_sort
+    ON cve_list_meta (description_sort(191), cve_id);
+CREATE INDEX IF NOT EXISTS idx_cve_list_meta_desc_key_cve
+    ON cve_list_meta (description_sort_key, cve_id);
+CREATE INDEX IF NOT EXISTS idx_cve_list_meta_score_cve
+    ON cve_list_meta (base_score, cve_id);
+CREATE INDEX IF NOT EXISTS idx_cve_list_meta_severity_cve
+    ON cve_list_meta (base_severity, cve_id);
+CREATE INDEX IF NOT EXISTS idx_cve_list_meta_vector_cve
+    ON cve_list_meta (attack_vector, cve_id);
+CREATE INDEX IF NOT EXISTS idx_cve_list_meta_tags_sort
+    ON cve_list_meta (tags_sort(191), cve_id);
+CREATE INDEX IF NOT EXISTS idx_cve_list_meta_tags_key_cve
+    ON cve_list_meta (tags_sort_key, cve_id);
+CREATE INDEX IF NOT EXISTS idx_cve_list_meta_has_poc_cve
+    ON cve_list_meta (has_poc, cve_id);
+CREATE INDEX IF NOT EXISTS idx_cve_list_meta_epss_cve
+    ON cve_list_meta (epss_score, cve_id);
 
 -- ============================================
 -- 초기 구성 데이터 (환경 설정)

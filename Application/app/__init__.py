@@ -20,11 +20,20 @@ def create_app():
     # Keep HTTP origin restrictions in app config; relax only socket origin checks.
     socketio.init_app(app, cors_allowed_origins="*")
 
-    from .db import init_pool, ensure_auth_schema, ensure_epss_schema, ensure_performance_indexes
+    from .db import (
+        init_pool,
+        ensure_auth_schema,
+        ensure_epss_schema,
+        ensure_job_progress_schema,
+        ensure_performance_indexes,
+        ensure_cve_list_meta_schema,
+    )
     init_pool(app)
     ensure_auth_schema(app)
     ensure_epss_schema(app)
+    ensure_job_progress_schema(app)
     ensure_performance_indexes(app)
+    ensure_cve_list_meta_schema(app)
 
     @app.context_processor
     def inject_global_config():

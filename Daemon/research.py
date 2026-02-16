@@ -8,7 +8,7 @@ class GitHubPoCCollector:
     def __init__(self, github_token, db_config, start_year=1999, start_month=1, base_dir="./poc_sources",
                  request_interval=1, download_interval=2, retry_interval=10, max_retries=3,
                  max_download_size_bytes=500 * 1024 * 1024, max_threads=5,
-                 research_wait_minutes=5, rate_limit_threshold=500):
+                 research_wait_minutes=5, rate_limit_threshold=500, progress_callback=None):
         self.github_token = github_token
         self.db_config = db_config
         self.start_year = start_year
@@ -45,6 +45,7 @@ class GitHubPoCCollector:
             "privilege escalation",
             "cve",
         )
+        self.progress_callback = progress_callback
 
     # =========================
     # Logging
@@ -62,6 +63,14 @@ class GitHubPoCCollector:
                 conn.close()
             except:
                 pass
+
+    def _emit_progress(self, current_step, total_steps, detail):
+        if not callable(self.progress_callback):
+            return
+        try:
+            self.progress_callback(int(current_step), int(total_steps), str(detail))
+        except Exception:
+            pass
 
     # =========================
     # Rate Limit ?ъ쟾 ?뺤씤
@@ -464,6 +473,9 @@ class GitHubPoCCollector:
     def process(self):
         cves = self.get_recent_cves()
         self.log("INFO", f"Start processing {len(cves)} CVEs using {self.max_threads} threads")
+        total = len(cves)
+        completed = 0
+        self._emit_progress(0, max(1, total), f"Starting PoC research for {total} CVEs")
 
         with ThreadPoolExecutor(max_workers=self.max_threads) as executor:
             futures = {executor.submit(self.process_single_cve, cve): cve for cve in cves}
@@ -473,4 +485,10 @@ class GitHubPoCCollector:
                     future.result()
                 except Exception as e:
                     self.log("ERROR", f"{cve}: Future crashed with {e}")
+                finally:
+                    completed += 1
+                    if completed % 10 == 0 or completed == total:
+                        self._emit_progress(completed, max(1, total), f"PoC research {completed}/{total}")
+
+        self._emit_progress(max(1, total), max(1, total), "PoC research completed")
 

@@ -8,7 +8,14 @@ import requests
 
 
 class CVEParser:
-    def __init__(self, db_config, json_base_dir_path, start_year):
+    def __init__(
+        self,
+        db_config,
+        json_base_dir_path,
+        start_year,
+        parse_progress_callback=None,
+        epss_progress_callback=None,
+    ):
         self.db_config = db_config
         self.json_base_dir_path = json_base_dir_path
         self.start_year = start_year
@@ -24,6 +31,8 @@ class CVEParser:
         self.conn = None
         self.cursor = None
         self._epss_session = requests.Session()
+        self.parse_progress_callback = parse_progress_callback
+        self.epss_progress_callback = epss_progress_callback
         self._connect()
         self.ensure_epss_schema()
 
@@ -78,6 +87,22 @@ class CVEParser:
             except Exception:
                 pass
 
+    def _emit_parse_progress(self, current_step, total_steps, detail):
+        if not callable(self.parse_progress_callback):
+            return
+        try:
+            self.parse_progress_callback(int(current_step), int(total_steps), str(detail))
+        except Exception:
+            pass
+
+    def _emit_epss_progress(self, current_step, total_steps, detail):
+        if not callable(self.epss_progress_callback):
+            return
+        try:
+            self.epss_progress_callback(int(current_step), int(total_steps), str(detail))
+        except Exception:
+            pass
+
     # =========================
     # JSON loading
     # =========================
@@ -96,6 +121,13 @@ class CVEParser:
                         yield json.load(f)
                     except json.JSONDecodeError:
                         self.log("ERROR", f"Invalid JSON format: {file_path}")
+
+    def count_total_cves_from_year_dirs(self):
+        total = 0
+        for file_data in self.iter_json_data_from_year_dirs():
+            if isinstance(file_data, list):
+                total += len(file_data)
+        return total
 
     def ensure_epss_schema(self):
         self.cursor.execute(
@@ -305,17 +337,20 @@ class CVEParser:
     def refresh_epss_scores(self, cve_ids):
         normalized = sorted({(cve_id or "").strip().upper() for cve_id in cve_ids if cve_id})
         if not normalized:
+            self._emit_epss_progress(0, 0, "No CVEs to refresh")
             return
 
         targets = self._cves_needing_epss_refresh(normalized)
         if not targets:
             self.log("INFO", "EPSS refresh skipped: all parsed CVEs are up-to-date")
+            self._emit_epss_progress(len(normalized), len(normalized), "EPSS already up-to-date")
             return
 
         self.log(
             "INFO",
             f"EPSS refresh started for {len(targets)} CVEs (parsed={len(normalized)}, refresh_days={self.epss_refresh_days})",
         )
+        self._emit_epss_progress(0, len(targets), "Starting EPSS refresh")
 
         updated = 0
         for chunk in self._chunked(targets, self.epss_batch_size):
@@ -345,10 +380,12 @@ class CVEParser:
             if records:
                 self._upsert_epss_records_with_retry(records)
                 updated += len(records)
+                self._emit_epss_progress(updated, len(targets), f"EPSS refreshed {updated}/{len(targets)}")
 
             if updated and updated % 1000 == 0:
                 self.log("INFO", f"EPSS upsert progress: {updated}/{len(targets)}")
 
+        self._emit_epss_progress(len(targets), len(targets), "EPSS refresh completed")
         self.log("SUCCESS", f"EPSS refresh completed. updated={updated}, targets={len(targets)}")
 
     # =========================
@@ -537,7 +574,11 @@ class CVEParser:
     def process_data(self):
         processed = 0
         processed_cve_ids = set()
+        total_cves = 0
         try:
+            total_cves = self.count_total_cves_from_year_dirs()
+            self._emit_parse_progress(0, max(1, total_cves), f"Starting CVE upsert (total={total_cves})")
+
             for file_data in self.iter_json_data_from_year_dirs():
                 for item in file_data:
                     cve = item.get("cve")
@@ -546,8 +587,12 @@ class CVEParser:
                     self._upsert_single_cve_with_retry(cve)
                     processed_cve_ids.add(cve["id"])
                     processed += 1
+                    if processed % 250 == 0:
+                        self._emit_parse_progress(processed, max(1, total_cves), f"CVE upsert {processed}/{total_cves}")
                     if processed % 1000 == 0:
                         self.log("INFO", f"CVE upsert progress: {processed}")
+
+            self._emit_parse_progress(max(processed, total_cves), max(1, total_cves), "CVE upsert completed")
 
             try:
                 self.refresh_epss_scores(processed_cve_ids)

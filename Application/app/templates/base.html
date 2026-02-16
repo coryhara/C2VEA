@@ -73,6 +73,13 @@
 
       .topbar { border-bottom: 1px solid var(--border-glass) !important; }
       .menubar { border-right: 1px solid var(--border-glass) !important; }
+      .topbar-left {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
 
       /* Brand */
       .brand-badge {
@@ -90,6 +97,37 @@
         letter-spacing: -0.5px;
       }
       .brand-text small { color: var(--text-muted); }
+      .job-progress-list {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.38rem;
+        min-height: 1.8rem;
+      }
+      .job-progress-list:empty {
+        display: none;
+      }
+      .job-progress-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.28rem 0.54rem;
+        border-radius: 999px;
+        border: 1px solid rgba(77, 194, 255, 0.5);
+        background: rgba(9, 34, 63, 0.74);
+        color: #dff4ff;
+        font-size: 0.74rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .job-progress-type {
+        color: #8de8ff;
+        font-weight: 800;
+      }
+      .job-progress-percent {
+        color: #7ef2be;
+        font-weight: 800;
+      }
 
       a { color: var(--primary); text-decoration: none; transition: all 0.2s; }
       a:hover { color: #fff; text-shadow: 0 0 8px var(--primary-glow); }
@@ -162,13 +200,18 @@
 
   <body>
     <header class="topbar">
-      <a class="brand" href="/">
-        <span class="brand-badge">C</span>
-        <span class="brand-text">
-          <strong>Coharas</strong>
-          <small>Vulnerability Intelligence</small>
-        </span>
-      </a>
+      <div class="topbar-left">
+        <a class="brand" href="/">
+          <span class="brand-badge">C</span>
+          <span class="brand-text">
+            <strong>Coharas</strong>
+            <small>Vulnerability Intelligence</small>
+          </span>
+        </a>
+        {% if session.nickname %}
+          <div id="jobProgressList" class="job-progress-list" aria-live="polite"></div>
+        {% endif %}
+      </div>
 
       <div class="topbar-actions">
         {% if session.nickname %}
@@ -211,6 +254,46 @@
     <script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
     <script>
       {% if session.nickname %}
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (m) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#039;",
+        })[m]);
+      }
+
+      function renderJobProgress(items) {
+        const host = document.getElementById("jobProgressList");
+        if (!host) return;
+        host.innerHTML = "";
+
+        const rows = Array.isArray(items) ? items : [];
+        if (!rows.length) return;
+
+        rows.forEach((row) => {
+          const label = escapeHtml(row.job_label || row.job_key || "Job");
+          const percentNum = Number(row.progress_percent || 0);
+          const percent = Number.isFinite(percentNum) ? `${percentNum.toFixed(1)}%` : "0.0%";
+          const cur = Number(row.current_step || 0);
+          const total = Number(row.total_steps || 0);
+          const counter = total > 0 ? ` ${cur}/${total}` : "";
+          const detail = (row.detail || "").trim();
+          const title = detail ? `${label} - ${detail}` : label;
+
+          const pill = document.createElement("span");
+          pill.className = "job-progress-pill";
+          pill.title = title;
+          pill.innerHTML = `
+            <span class="job-progress-type">${label}</span>
+            <span class="job-progress-percent">${percent}</span>
+            <span>${escapeHtml(counter)}</span>
+          `;
+          host.appendChild(pill);
+        });
+      }
+
       const socket = io({
         path: "/socket.io/",
         transports: ["websocket", "polling"],
@@ -218,6 +301,18 @@
 
       socket.on("notify", (msg) => {
         if (msg && msg.message) showAlert(msg.message);
+      });
+
+      socket.on("connect", () => {
+        socket.emit("subscribe_job_progress", { interval_ms: 1500 });
+      });
+
+      socket.on("job_progress_snapshot", (items) => {
+        renderJobProgress(items);
+      });
+
+      window.addEventListener("beforeunload", () => {
+        socket.emit("unsubscribe_job_progress");
       });
       {% endif %}
 

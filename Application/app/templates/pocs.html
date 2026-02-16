@@ -63,6 +63,14 @@ function escapeHTML(str) {
 let currentPage = 1;
 let currentFilters = { size: "100" };
 let currentSort = { column: "created_at", order: "DESC" };
+let currentTotal = null;
+let currentCountSignature = "";
+
+function buildCountSignature(filters = {}) {
+  const cleaned = { ...filters };
+  delete cleaned.size;
+  return Object.keys(cleaned).sort().map((k) => `${k}=${cleaned[k]}`).join("&");
+}
 
 function setSort(column) {
   if (currentSort.column === column) {
@@ -102,9 +110,16 @@ function loadPOC(page=1, filters={}) {
   }
   currentFilters = mergedFilters;
   const params = new URLSearchParams({ ...currentFilters, page, sort: currentSort.column, order: currentSort.order });
+  const countSignature = buildCountSignature(currentFilters);
+  if (currentTotal !== null && countSignature === currentCountSignature) {
+    params.set("skip_count", "1");
+    params.set("known_total", String(currentTotal));
+  }
   fetch("/api/pocs?" + params)
     .then(r => r.json())
     .then(data => {
+      currentTotal = Number.isFinite(Number(data.total)) ? Number(data.total) : null;
+      currentCountSignature = countSignature;
       const tbody = document.querySelector("#pocTable tbody");
       tbody.innerHTML = "";
 

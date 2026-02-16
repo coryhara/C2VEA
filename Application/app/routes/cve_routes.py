@@ -12,6 +12,16 @@ from app.utils.decorators import (
 
 cve_bp = Blueprint("cve", __name__)
 
+META_SORT_EXPR = {
+    "d.description_value": "meta_sort.description_sort_key",
+    "m.base_score": "meta_sort.base_score",
+    "m.base_severity": "meta_sort.base_severity",
+    "m.attack_vector": "meta_sort.attack_vector",
+    "e.epss_score": "meta_sort.epss_score",
+    "tags": "meta_sort.tags_sort_key",
+    "has_poc": "meta_sort.has_poc",
+}
+
 
 def _safe_load_json(value, default):
     if value in (None, ""):
@@ -25,8 +35,7 @@ def _safe_load_json(value, default):
         return default
 
 
-def _build_cve_count_query(args):
-    joins = []
+def _build_cve_where(args):
     where = ["1=1"]
     params = []
 
@@ -34,32 +43,73 @@ def _build_cve_count_query(args):
         where.append("v.published BETWEEN %s AND %s")
         params.extend([args["start"], args["end"]])
 
-    need_metrics = bool(args.get("severity") or (args.get("min_score") and args.get("max_score")) or args.get("vector"))
-    need_tags = bool(args.get("tag"))
-    need_desc = bool(args.get("search"))
-
-    if need_metrics:
-        joins.append("INNER JOIN cvss_metrics m ON v.cve_id = m.cve_id")
-    if need_tags:
-        joins.append("INNER JOIN cve_tags t ON v.cve_id = t.cve_id")
-    if need_desc:
-        joins.append("INNER JOIN cve_descriptions d ON v.cve_id = d.cve_id")
-
     if args.get("severity"):
-        where.append("m.base_severity = %s")
+        where.append(
+            """
+            EXISTS (
+              SELECT 1
+              FROM cvss_metrics m
+              WHERE m.cve_id = v.cve_id
+                AND m.base_severity = %s
+            )
+            """
+        )
         params.append(args["severity"])
+
     if args.get("min_score") and args.get("max_score"):
-        where.append("m.base_score BETWEEN %s AND %s")
+        where.append(
+            """
+            EXISTS (
+              SELECT 1
+              FROM cvss_metrics m
+              WHERE m.cve_id = v.cve_id
+                AND m.base_score BETWEEN %s AND %s
+            )
+            """
+        )
         params.extend([args["min_score"], args["max_score"]])
+
     if args.get("tag"):
-        where.append("t.tag LIKE %s")
+        where.append(
+            """
+            EXISTS (
+              SELECT 1
+              FROM cve_tags t
+              WHERE t.cve_id = v.cve_id
+                AND t.tag LIKE %s
+            )
+            """
+        )
         params.append(f"%{args['tag']}%")
+
     if args.get("vector"):
-        where.append("m.attack_vector = %s")
+        where.append(
+            """
+            EXISTS (
+              SELECT 1
+              FROM cvss_metrics m
+              WHERE m.cve_id = v.cve_id
+                AND m.attack_vector = %s
+            )
+            """
+        )
         params.append(args["vector"])
+
     if args.get("search"):
-        where.append("(v.cve_id LIKE %s OR d.description_value LIKE %s)")
         keyword = f"%{args['search']}%"
+        where.append(
+            """
+            (
+              v.cve_id LIKE %s
+              OR EXISTS (
+                SELECT 1
+                FROM cve_descriptions d
+                WHERE d.cve_id = v.cve_id
+                  AND d.description_value LIKE %s
+              )
+            )
+            """
+        )
         params.extend([keyword, keyword])
 
     has_poc = (args.get("has_poc") or "").strip().lower()
@@ -68,10 +118,21 @@ def _build_cve_count_query(args):
     elif has_poc in {"no", "0", "false", "n"}:
         where.append("NOT EXISTS (SELECT 1 FROM cve_poc_sources p2 WHERE p2.cve_id = v.cve_id)")
 
+    return where, params
+
+
+def _build_cve_sort_join_and_expr(sort):
+    if sort in META_SORT_EXPR:
+        return ("", META_SORT_EXPR[sort], "meta_sort.cve_id", True)
+
+    return ("", "v.cve_id", "v.cve_id", False)
+
+
+def _build_cve_count_query(args):
+    where, params = _build_cve_where(args)
     query = f"""
-        SELECT COUNT(DISTINCT v.cve_id) AS total
+        SELECT COUNT(*) AS total
         FROM cve_vulnerabilities v
-        {' '.join(joins)}
         WHERE {' AND '.join(where)}
     """
     return query, params
@@ -238,59 +299,16 @@ def api_cves():
     if size not in allowed_sizes:
         size = 100
     offset = (page - 1) * size
+    skip_count = str(args.get("skip_count", "")).strip().lower() in {"1", "true", "yes", "y"}
+    known_total = None
+    if skip_count:
+        try:
+            known_total = max(0, int(args.get("known_total", "")))
+        except (TypeError, ValueError):
+            known_total = None
 
-    # === 湲곕낯 SELECT 荑쇰━ ===
-    base_query = """
-        FROM cve_vulnerabilities v
-        LEFT JOIN cve_descriptions d ON v.cve_id = d.cve_id
-        LEFT JOIN cvss_metrics m ON v.cve_id = m.cve_id
-        LEFT JOIN cve_tags t ON v.cve_id = t.cve_id
-        LEFT JOIN cve_epss e ON v.cve_id = e.cve_id
-        WHERE 1=1
-    """
-    conditions = []
-    params = []
+    where, params = _build_cve_where(args)
 
-    # === ?꾪꽣 ===
-    if args.get("start") and args.get("end"):
-        conditions.append("v.published BETWEEN %s AND %s")
-        params.extend([args["start"], args["end"]])
-    if args.get("severity"):
-        conditions.append("m.base_severity = %s")
-        params.append(args["severity"])
-    if args.get("min_score") and args.get("max_score"):
-        conditions.append("m.base_score BETWEEN %s AND %s")
-        params.extend([args["min_score"], args["max_score"]])
-    if args.get("tag"):
-        conditions.append("t.tag LIKE %s")
-        params.append(f"%{args['tag']}%")
-    if args.get("vector"):
-        conditions.append("m.attack_vector = %s")
-        params.append(args["vector"])
-    if args.get("search"):
-        conditions.append("(v.cve_id LIKE %s OR d.description_value LIKE %s)")
-        keyword = f"%{args['search']}%"
-        params.extend([keyword, keyword])
-    has_poc = (args.get("has_poc") or "").strip().lower()
-    if has_poc in {"yes", "1", "true", "y"}:
-        conditions.append("EXISTS (SELECT 1 FROM cve_poc_sources p2 WHERE p2.cve_id = v.cve_id)")
-    elif has_poc in {"no", "0", "false", "n"}:
-        conditions.append("NOT EXISTS (SELECT 1 FROM cve_poc_sources p2 WHERE p2.cve_id = v.cve_id)")
-
-    if conditions:
-        base_query += " AND " + " AND ".join(conditions)
-
-    # === ?곗씠??荑쇰━ ===
-    data_query = f"""
-        SELECT v.cve_id, d.description_value, m.base_score, m.base_severity, m.attack_vector,
-               e.epss_score, e.epss_percentile,
-               GROUP_CONCAT(DISTINCT t.tag ORDER BY t.tag SEPARATOR ', ') AS tags,
-               EXISTS(SELECT 1 FROM cve_poc_sources p3 WHERE p3.cve_id = v.cve_id) AS has_poc
-        {base_query}
-        GROUP BY v.cve_id
-    """
-
-    # === ?뺣젹 ===
     sort = args.get("sort", "v.cve_id")
     order = args.get("order", "DESC").upper()
     if sort not in ["v.cve_id", "d.description_value", "m.base_score", "m.base_severity", "m.attack_vector", "e.epss_score", "tags", "has_poc"]:
@@ -298,18 +316,56 @@ def api_cves():
     if order not in ["ASC", "DESC"]:
         order = "DESC"
 
-    data_query += f" ORDER BY {sort} {order} LIMIT %s OFFSET %s"
-    params_data = params + [size, offset]
+    sort_join, sort_expr, tie_expr, use_meta_base = _build_cve_sort_join_and_expr(sort)
+    where_sql = " AND ".join(where)
+    from_clause = "FROM cve_vulnerabilities v"
+    tie_order = "DESC"
+    if use_meta_base:
+        from_clause = "FROM cve_list_meta meta_sort JOIN cve_vulnerabilities v ON v.cve_id = meta_sort.cve_id"
+        tie_order = order
 
-    # === total 荑쇰━ (議곌굔 ?ы븿) ===
-    count_query, count_params = _build_cve_count_query(args)
+    page_id_query = f"""
+        SELECT v.cve_id
+        {from_clause}
+        {sort_join}
+        WHERE {where_sql}
+        ORDER BY {sort_expr} {order}, {tie_expr} {tie_order}
+        LIMIT %s OFFSET %s
+    """
 
     with get_conn() as conn, get_cursor(conn) as cur:
-        cur.execute(data_query, params_data)
-        rows = cur.fetchall()
+        if skip_count and known_total is not None:
+            total = known_total
+        else:
+            count_query, count_params = _build_cve_count_query(args)
+            cur.execute(count_query, count_params)
+            total = cur.fetchone()["total"]
 
-        cur.execute(count_query, count_params)
-        total = cur.fetchone()["total"]
+        cur.execute(page_id_query, params + [size, offset])
+        page_ids = [row["cve_id"] for row in cur.fetchall()]
+
+        rows = []
+        if page_ids:
+            placeholders = ", ".join(["%s"] * len(page_ids))
+            details_query = f"""
+                SELECT
+                  v.cve_id,
+                  meta.description_value,
+                  meta.base_score,
+                  meta.base_severity,
+                  meta.attack_vector,
+                  e.epss_score,
+                  e.epss_percentile,
+                  meta.tags,
+                  meta.has_poc
+                FROM cve_vulnerabilities v
+                LEFT JOIN cve_epss e ON e.cve_id = v.cve_id
+                LEFT JOIN cve_list_meta meta ON meta.cve_id = v.cve_id
+                WHERE v.cve_id IN ({placeholders})
+                ORDER BY FIELD(v.cve_id, {placeholders})
+            """
+            cur.execute(details_query, page_ids + page_ids)
+            rows = cur.fetchall()
 
     return jsonify({
         "page": page,

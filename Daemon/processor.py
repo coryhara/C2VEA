@@ -2,7 +2,7 @@ import requests, os, json, time, pymysql
 from datetime import datetime, timedelta
 
 class CVEProcessor:
-    def __init__(self, start_year, start_month, db_config, interval, cve_dir="./cve"):
+    def __init__(self, start_year, start_month, db_config, interval, cve_dir="./cve", progress_callback=None):
         self.start_year, self.start_month, self.db_config, self.interval = start_year, start_month, db_config, interval
         self.timestamp_dir = datetime.now().strftime("%Y%m%d%H%M%S")
         self.cve_base_dir = os.path.join(cve_dir, self.timestamp_dir)
@@ -13,6 +13,7 @@ class CVEProcessor:
         self.base_url = "https://services.nvd.nist.gov/rest/json/cves/2.0/"
 
         self._stop = False
+        self.progress_callback = progress_callback
 
     # =========================
     # 로깅
@@ -33,6 +34,17 @@ class CVEProcessor:
                 conn.close()
             except:
                 pass
+
+    def _emit_progress(self, current_step, total_steps, detail):
+        if not callable(self.progress_callback):
+            return
+        try:
+            self.progress_callback(int(current_step), int(total_steps), str(detail))
+        except Exception:
+            pass
+
+    def _total_month_count(self):
+        return ((self.end_year - self.start_year) * 12) + (self.end_month - self.start_month) + 1
 
     # =========================
     # CVE 요청
@@ -77,9 +89,13 @@ class CVEProcessor:
     # =========================
     def process_cves(self):
         fail_list, y, m = [], self.start_year, self.start_month
+        total_months = max(1, self._total_month_count())
+        processed_months = 0
+        self._emit_progress(0, total_months, "Preparing monthly CVE fetch")
         while (y < self.end_year) or (y == self.end_year and m <= self.end_month):
             if self._stop: break
             self.log("INFO", f"Processing {y}-{m:02d}")
+            self._emit_progress(processed_months, total_months, f"Fetching {y}-{m:02d}")
             resp, vulns = self.request_cve(y, m)
             time.sleep(self.interval)
 
@@ -90,18 +106,25 @@ class CVEProcessor:
                 self.save_cves(y, m, vulns)
                 self.log("SUCCESS", f"{y}-{m:02d} done ({len(vulns)} CVEs)")
 
+            processed_months += 1
+            self._emit_progress(processed_months, total_months, f"Processed {y}-{m:02d}")
             y, m = (y+1, 1) if m == 12 else (y, m+1)
         return fail_list
 
     def retry_failed_requests(self, fail_list):
+        retry_total = len(fail_list)
+        retry_done = 0
         while fail_list and not self._stop:
             y, m = fail_list[0]
             self.log("INFO", f"Retrying {y}-{m:02d}")
+            self._emit_progress(retry_done, max(1, retry_total), f"Retrying failed month {y}-{m:02d}")
             resp, vulns = self.request_cve(y, m)
             if resp and resp.status_code == 200 and vulns:
                 self.save_cves(y, m, vulns)
                 self.log("SUCCESS", f"Retry success {y}-{m:02d}")
                 fail_list.pop(0)
+                retry_done += 1
+                self._emit_progress(retry_done, max(1, retry_total), f"Retry success {y}-{m:02d}")
                 time.sleep(self.interval)
             else:
                 self.log("ERROR", f"Retry failed {y}-{m:02d} ({resp.status_code if resp else 'None'})")
@@ -118,4 +141,5 @@ class CVEProcessor:
             self.retry_failed_requests(fails)
         elif not self._stop:
             self.log("INFO", "All requests succeeded")
+        self._emit_progress(1, 1, "CVE raw data fetch completed")
         self.log("INFO", "CVEProcessor finished")

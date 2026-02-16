@@ -172,6 +172,62 @@ def ensure_epss_schema(app):
             conn.close()
 
 
+def ensure_job_progress_schema(app):
+    """Create table used for daemon job progress tracking."""
+    conn = None
+    cur = None
+    try:
+        conn = get_conn()
+        cur = get_cursor(conn)
+
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS job_progress (
+                job_key VARCHAR(100) PRIMARY KEY,
+                job_type VARCHAR(60) NOT NULL,
+                job_label VARCHAR(120) NOT NULL,
+                status VARCHAR(20) NOT NULL,
+                progress_percent DECIMAL(6,2) NOT NULL DEFAULT 0,
+                current_step BIGINT NOT NULL DEFAULT 0,
+                total_steps BIGINT NOT NULL DEFAULT 0,
+                detail VARCHAR(255) NULL,
+                started_at TIMESTAMP NULL,
+                finished_at TIMESTAMP NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+        cur.execute(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA=%s
+              AND TABLE_NAME='job_progress'
+              AND INDEX_NAME='idx_job_progress_status_updated'
+            """,
+            (app.config["DB_NAME"],),
+        )
+        has_status_index = (cur.fetchone() or {}).get("cnt", 0) > 0
+        if not has_status_index:
+            cur.execute(
+                "ALTER TABLE job_progress ADD INDEX idx_job_progress_status_updated (status, updated_at)"
+            )
+
+        conn.commit()
+        app.logger.info("Job progress schema migration check completed")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        app.logger.exception("Job progress schema migration failed: %s", e)
+        raise
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
 def ensure_performance_indexes(app):
     """Create missing non-breaking indexes used by list APIs."""
     conn = None
@@ -186,12 +242,19 @@ def ensure_performance_indexes(app):
             ("cvss_metrics", "idx_cvss_metrics_severity_cve", "ALTER TABLE cvss_metrics ADD INDEX idx_cvss_metrics_severity_cve (base_severity, cve_id)"),
             ("cvss_metrics", "idx_cvss_metrics_score_cve", "ALTER TABLE cvss_metrics ADD INDEX idx_cvss_metrics_score_cve (base_score, cve_id)"),
             ("cvss_metrics", "idx_cvss_metrics_vector_cve", "ALTER TABLE cvss_metrics ADD INDEX idx_cvss_metrics_vector_cve (attack_vector, cve_id)"),
+            ("cvss_metrics", "idx_cvss_metrics_cve_score", "ALTER TABLE cvss_metrics ADD INDEX idx_cvss_metrics_cve_score (cve_id, base_score)"),
+            ("cvss_metrics", "idx_cvss_metrics_cve_score_id", "ALTER TABLE cvss_metrics ADD INDEX idx_cvss_metrics_cve_score_id (cve_id, base_score, id)"),
             ("cve_descriptions", "idx_cve_desc_cve_lang", "ALTER TABLE cve_descriptions ADD INDEX idx_cve_desc_cve_lang (cve_id, description_lang)"),
+            ("cve_descriptions", "idx_cve_desc_cve_lang_id", "ALTER TABLE cve_descriptions ADD INDEX idx_cve_desc_cve_lang_id (cve_id, description_lang, id)"),
             ("cve_tags", "idx_cve_tags_cve_tag", "ALTER TABLE cve_tags ADD INDEX idx_cve_tags_cve_tag (cve_id, tag)"),
             ("cve_poc_sources", "idx_cve_poc_created_id", "ALTER TABLE cve_poc_sources ADD INDEX idx_cve_poc_created_id (created_at, id)"),
             ("cve_poc_sources", "idx_cve_poc_source_id", "ALTER TABLE cve_poc_sources ADD INDEX idx_cve_poc_source_id (source_identifier, id)"),
             ("cve_poc_sources", "idx_cve_poc_cve_id", "ALTER TABLE cve_poc_sources ADD INDEX idx_cve_poc_cve_id (cve_id)"),
+            ("cve_poc_sources", "idx_cve_poc_cve_id_id", "ALTER TABLE cve_poc_sources ADD INDEX idx_cve_poc_cve_id_id (cve_id, id)"),
+            ("cve_poc_sources", "idx_cve_poc_source_identifier_id", "ALTER TABLE cve_poc_sources ADD INDEX idx_cve_poc_source_identifier_id (source_identifier, id)"),
+            ("cve_poc_sources", "idx_cve_poc_url_id", "ALTER TABLE cve_poc_sources ADD INDEX idx_cve_poc_url_id (url(191), id)"),
             ("cve_epss", "idx_cve_epss_score", "ALTER TABLE cve_epss ADD INDEX idx_cve_epss_score (epss_score)"),
+            ("job_progress", "idx_job_progress_status_updated", "ALTER TABLE job_progress ADD INDEX idx_job_progress_status_updated (status, updated_at)"),
         ]
 
         for table_name, index_name, ddl in index_specs:
@@ -215,6 +278,270 @@ def ensure_performance_indexes(app):
         if conn:
             conn.rollback()
         app.logger.exception("Performance index migration failed: %s", e)
+        raise
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def ensure_cve_list_meta_schema(app):
+    """
+    Build a lightweight per-CVE projection table used by list sorting.
+    This removes expensive per-request aggregate subqueries from /api/cves.
+    """
+    conn = None
+    cur = None
+    schema = app.config["DB_NAME"]
+    try:
+        conn = get_conn()
+        cur = get_cursor(conn)
+
+        def _execute_with_retry(sql, params=None, retries=4):
+            for attempt in range(1, retries + 1):
+                try:
+                    cur.execute(sql, params or ())
+                    return True
+                except errors.InternalError as e:
+                    msg = str(e).lower()
+                    is_lock_issue = ("deadlock found" in msg) or ("lock wait timeout exceeded" in msg)
+                    if not is_lock_issue:
+                        raise
+                    if attempt >= retries:
+                        app.logger.warning("cve_list_meta sync skipped after lock retries: %s", e)
+                        return False
+                    time.sleep(0.4 * attempt)
+
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cve_list_meta (
+                cve_id VARCHAR(50) PRIMARY KEY,
+                description_value MEDIUMTEXT NULL,
+                description_sort VARCHAR(512) NULL,
+                description_sort_key VARCHAR(191) NULL,
+                base_score DOUBLE NULL,
+                base_severity VARCHAR(20) NULL,
+                attack_vector VARCHAR(20) NULL,
+                tags TEXT NULL,
+                tags_sort VARCHAR(512) NULL,
+                tags_sort_key VARCHAR(191) NULL,
+                has_poc TINYINT(1) NOT NULL DEFAULT 0,
+                epss_score DOUBLE NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                CONSTRAINT fk_cve_list_meta_cve
+                    FOREIGN KEY (cve_id)
+                    REFERENCES cve_vulnerabilities (cve_id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+
+        # Backward-compatible column adds for existing deployments.
+        column_specs = [
+            ("description_sort_key", "ALTER TABLE cve_list_meta ADD COLUMN description_sort_key VARCHAR(191) NULL AFTER description_sort"),
+            ("tags_sort_key", "ALTER TABLE cve_list_meta ADD COLUMN tags_sort_key VARCHAR(191) NULL AFTER tags_sort"),
+        ]
+        for column_name, ddl in column_specs:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA=%s
+                  AND TABLE_NAME='cve_list_meta'
+                  AND COLUMN_NAME=%s
+                """,
+                (schema, column_name),
+            )
+            exists = (cur.fetchone() or {}).get("cnt", 0) > 0
+            if not exists:
+                cur.execute(ddl)
+
+        index_specs = [
+            ("cve_list_meta", "idx_cve_list_meta_desc_sort", "ALTER TABLE cve_list_meta ADD INDEX idx_cve_list_meta_desc_sort (description_sort(191), cve_id)"),
+            ("cve_list_meta", "idx_cve_list_meta_desc_key_cve", "ALTER TABLE cve_list_meta ADD INDEX idx_cve_list_meta_desc_key_cve (description_sort_key, cve_id)"),
+            ("cve_list_meta", "idx_cve_list_meta_score_cve", "ALTER TABLE cve_list_meta ADD INDEX idx_cve_list_meta_score_cve (base_score, cve_id)"),
+            ("cve_list_meta", "idx_cve_list_meta_severity_cve", "ALTER TABLE cve_list_meta ADD INDEX idx_cve_list_meta_severity_cve (base_severity, cve_id)"),
+            ("cve_list_meta", "idx_cve_list_meta_vector_cve", "ALTER TABLE cve_list_meta ADD INDEX idx_cve_list_meta_vector_cve (attack_vector, cve_id)"),
+            ("cve_list_meta", "idx_cve_list_meta_tags_sort", "ALTER TABLE cve_list_meta ADD INDEX idx_cve_list_meta_tags_sort (tags_sort(191), cve_id)"),
+            ("cve_list_meta", "idx_cve_list_meta_tags_key_cve", "ALTER TABLE cve_list_meta ADD INDEX idx_cve_list_meta_tags_key_cve (tags_sort_key, cve_id)"),
+            ("cve_list_meta", "idx_cve_list_meta_has_poc_cve", "ALTER TABLE cve_list_meta ADD INDEX idx_cve_list_meta_has_poc_cve (has_poc, cve_id)"),
+            ("cve_list_meta", "idx_cve_list_meta_epss_cve", "ALTER TABLE cve_list_meta ADD INDEX idx_cve_list_meta_epss_cve (epss_score, cve_id)"),
+        ]
+        for table_name, index_name, ddl in index_specs:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM information_schema.STATISTICS
+                WHERE TABLE_SCHEMA=%s
+                  AND TABLE_NAME=%s
+                  AND INDEX_NAME=%s
+                """,
+                (schema, table_name, index_name),
+            )
+            exists = (cur.fetchone() or {}).get("cnt", 0) > 0
+            if not exists:
+                cur.execute(ddl)
+
+        # Ensure all CVEs are present in the projection table.
+        _execute_with_retry(
+            """
+            INSERT INTO cve_list_meta (cve_id)
+            SELECT v.cve_id
+            FROM cve_vulnerabilities v
+            ON DUPLICATE KEY UPDATE cve_id = VALUES(cve_id)
+            """
+        )
+
+        # Keep projection table clean.
+        _execute_with_retry(
+            """
+            DELETE m
+            FROM cve_list_meta m
+            LEFT JOIN cve_vulnerabilities v ON v.cve_id = m.cve_id
+            WHERE v.cve_id IS NULL
+            """
+        )
+
+        # Full projection rebuild is expensive. Run only when cache has missing key fields.
+        cur.execute(
+            """
+            SELECT EXISTS(
+                SELECT 1
+                FROM cve_list_meta
+                WHERE description_sort_key IS NULL
+                LIMIT 1
+            ) AS needed
+            """
+        )
+        need_desc_refresh = bool((cur.fetchone() or {}).get("needed"))
+
+        cur.execute(
+            """
+            SELECT EXISTS(
+                SELECT 1
+                FROM cve_list_meta m
+                JOIN cvss_metrics cm ON cm.cve_id = m.cve_id
+                WHERE m.base_score IS NULL
+                LIMIT 1
+            ) AS needed
+            """
+        )
+        need_metric_refresh = bool((cur.fetchone() or {}).get("needed"))
+
+        cur.execute(
+            """
+            SELECT EXISTS(
+                SELECT 1
+                FROM cve_list_meta
+                WHERE tags IS NOT NULL
+                  AND tags_sort_key IS NULL
+                LIMIT 1
+            ) AS needed
+            """
+        )
+        need_tag_refresh = bool((cur.fetchone() or {}).get("needed"))
+
+        if need_desc_refresh or need_metric_refresh or need_tag_refresh:
+            # Preferred description: English first, otherwise the first available.
+            _execute_with_retry(
+                """
+                INSERT INTO cve_list_meta (cve_id, description_value, description_sort, description_sort_key)
+                SELECT
+                    d.cve_id,
+                    COALESCE(
+                        MAX(CASE WHEN d.description_lang='en' THEN d.description_value END),
+                        MIN(d.description_value)
+                    ) AS description_value,
+                    LEFT(
+                        COALESCE(
+                            MAX(CASE WHEN d.description_lang='en' THEN d.description_value END),
+                            MIN(d.description_value)
+                        ),
+                        512
+                    ) AS description_sort,
+                    LEFT(
+                        COALESCE(
+                            MAX(CASE WHEN d.description_lang='en' THEN d.description_value END),
+                            MIN(d.description_value)
+                        ),
+                        191
+                    ) AS description_sort_key
+                FROM cve_descriptions d
+                GROUP BY d.cve_id
+                ON DUPLICATE KEY UPDATE
+                    description_value = VALUES(description_value),
+                    description_sort = VALUES(description_sort),
+                    description_sort_key = VALUES(description_sort_key)
+                """
+            )
+
+            # Highest-score CVSS row per CVE (tie-break: lowest id).
+            _execute_with_retry(
+                """
+                INSERT INTO cve_list_meta (cve_id, base_score, base_severity, attack_vector)
+                SELECT
+                    m.cve_id,
+                    m.base_score,
+                    m.base_severity,
+                    m.attack_vector
+                FROM cvss_metrics m
+                JOIN (
+                    SELECT cve_id, MAX(base_score) AS max_score
+                    FROM cvss_metrics
+                    GROUP BY cve_id
+                ) mx ON mx.cve_id = m.cve_id AND mx.max_score = m.base_score
+                LEFT JOIN cvss_metrics tie
+                    ON tie.cve_id = m.cve_id
+                   AND tie.base_score = m.base_score
+                   AND tie.id < m.id
+                WHERE tie.id IS NULL
+                ON DUPLICATE KEY UPDATE
+                    base_score = VALUES(base_score),
+                    base_severity = VALUES(base_severity),
+                    attack_vector = VALUES(attack_vector)
+                """
+            )
+
+            # Aggregated tags for quick display/sorting.
+            _execute_with_retry(
+                """
+                INSERT INTO cve_list_meta (cve_id, tags, tags_sort, tags_sort_key)
+                SELECT
+                    t.cve_id,
+                    GROUP_CONCAT(DISTINCT t.tag ORDER BY t.tag SEPARATOR ', ') AS tags,
+                    LEFT(GROUP_CONCAT(DISTINCT t.tag ORDER BY t.tag SEPARATOR ', '), 512) AS tags_sort,
+                    LEFT(GROUP_CONCAT(DISTINCT t.tag ORDER BY t.tag SEPARATOR ', '), 191) AS tags_sort_key
+                FROM cve_tags t
+                GROUP BY t.cve_id
+                ON DUPLICATE KEY UPDATE
+                    tags = VALUES(tags),
+                    tags_sort = VALUES(tags_sort),
+                    tags_sort_key = VALUES(tags_sort_key)
+                """
+            )
+
+        # PoC presence + EPSS mirror.
+        _execute_with_retry(
+            """
+            UPDATE cve_list_meta m
+            LEFT JOIN (
+                SELECT DISTINCT cve_id, 1 AS has_poc
+                FROM cve_poc_sources
+            ) p ON p.cve_id = m.cve_id
+            LEFT JOIN cve_epss e ON e.cve_id = m.cve_id
+            SET
+                m.has_poc = COALESCE(p.has_poc, 0),
+                m.epss_score = e.epss_score
+            """
+        )
+
+        conn.commit()
+        app.logger.info("CVE list meta cache check completed")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        app.logger.exception("CVE list meta cache migration failed: %s", e)
         raise
     finally:
         if cur:

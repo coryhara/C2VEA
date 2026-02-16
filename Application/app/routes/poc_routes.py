@@ -239,8 +239,15 @@ def api_pocs():
     if size not in allowed_sizes:
         size = 100
     offset = (page - 1) * size
+    skip_count = str(args.get("skip_count", "")).strip().lower() in {"1", "true", "yes", "y"}
+    known_total = None
+    if skip_count:
+        try:
+            known_total = max(0, int(args.get("known_total", "")))
+        except (TypeError, ValueError):
+            known_total = None
 
-    base_query = "FROM cve_poc_sources WHERE 1=1"
+    base_query = "FROM cve_poc_sources p WHERE 1=1"
     conditions = []
     params = []
 
@@ -248,20 +255,15 @@ def api_pocs():
     keyword = args.get("keyword")
     if search_type in ["title", "source", "author"] and keyword:
         if search_type == "title":
-            conditions.append("cve_id LIKE %s")
+            conditions.append("p.cve_id LIKE %s")
         elif search_type == "source":
-            conditions.append("source_identifier LIKE %s")
+            conditions.append("p.source_identifier LIKE %s")
         elif search_type == "author":
-            conditions.append("url LIKE %s")
+            conditions.append("p.url LIKE %s")
         params.append(f"%{keyword}%")
 
     if conditions:
         base_query += " AND " + " AND ".join(conditions)
-
-    data_query = f"""
-        SELECT id, cve_id, source_identifier, url, created_at, downloaded_files
-        {base_query}
-    """
 
     sort = args.get("sort", "created_at")
     order = args.get("order", "DESC").upper()
@@ -270,16 +272,36 @@ def api_pocs():
     if order not in ["ASC", "DESC"]:
         order = "DESC"
 
-    data_query += f" ORDER BY {sort} {order} LIMIT %s OFFSET %s"
-    params_data = params + [size, offset]
+    sort_expr = f"p.{sort}"
+    page_id_query = f"""
+        SELECT p.id
+        {base_query}
+        ORDER BY {sort_expr} {order}, p.id DESC
+        LIMIT %s OFFSET %s
+    """
     count_query = f"SELECT COUNT(*) AS total {base_query}"
 
     with get_conn() as conn, get_cursor(conn) as cur:
-        cur.execute(data_query, params_data)
-        rows = cur.fetchall()
+        if skip_count and known_total is not None:
+            total = known_total
+        else:
+            cur.execute(count_query, params)
+            total = cur.fetchone()["total"]
 
-        cur.execute(count_query, params)
-        total = cur.fetchone()["total"]
+        cur.execute(page_id_query, params + [size, offset])
+        page_ids = [row["id"] for row in cur.fetchall()]
+
+        rows = []
+        if page_ids:
+            placeholders = ", ".join(["%s"] * len(page_ids))
+            details_query = f"""
+                SELECT p.id, p.cve_id, p.source_identifier, p.url, p.created_at, p.downloaded_files
+                FROM cve_poc_sources p
+                WHERE p.id IN ({placeholders})
+                ORDER BY FIELD(p.id, {placeholders})
+            """
+            cur.execute(details_query, page_ids + page_ids)
+            rows = cur.fetchall()
 
     for row in rows:
         if isinstance(row.get("downloaded_files"), (list, dict)):

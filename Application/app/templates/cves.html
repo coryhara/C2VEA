@@ -164,6 +164,8 @@ const severityColors = {
 let currentPage = 1;
 let currentFilters = {};
 let currentSort = { column: "v.cve_id", order: "DESC" };
+let currentTotal = null;
+let currentCountSignature = "";
 const allowedSortColumns = new Set(["v.cve_id", "d.description_value", "m.base_score", "e.epss_score", "m.base_severity", "m.attack_vector", "has_poc", "tags"]);
 const allowedPageSizes = new Set(["10", "50", "100", "200"]);
 const filterKeys = ["start", "end", "severity", "min_score", "max_score", "tag", "vector", "has_poc", "search", "size"];
@@ -186,6 +188,12 @@ function buildStateParams(page = currentPage, filters = currentFilters, sort = c
   params.set("sort", sort?.column || "v.cve_id");
   params.set("order", sort?.order || "DESC");
   return params;
+}
+
+function buildCountSignature(filters = {}) {
+  const cleaned = normalizeFilters(filters || {});
+  const keys = Object.keys(cleaned).filter((k) => k !== "size").sort();
+  return keys.map((k) => `${k}=${cleaned[k]}`).join("&");
 }
 
 function syncListUrl() {
@@ -230,10 +238,17 @@ function loadCVE(page=1, filters={}) {
   currentPage = page;
   currentFilters = normalizeFilters(filters);
   const params = buildStateParams(currentPage, currentFilters, currentSort);
+  const countSignature = buildCountSignature(currentFilters);
+  if (currentTotal !== null && countSignature === currentCountSignature) {
+    params.set("skip_count", "1");
+    params.set("known_total", String(currentTotal));
+  }
   syncListUrl();
   fetch("/api/cves?" + params)
     .then(r => r.json())
     .then(data => {
+      currentTotal = Number.isFinite(Number(data.total)) ? Number(data.total) : null;
+      currentCountSignature = countSignature;
       const tbody = document.querySelector("#cveTable tbody");
       tbody.innerHTML = "";
       data.items.forEach(r => {

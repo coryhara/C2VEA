@@ -9,8 +9,10 @@ from .db import get_conn, get_cursor
 def register_socket_handlers(socketio, app):
     poll_ms = app.config.get("POLL_INTERVAL_MS", 1000)
     dashboard_poll_ms = app.config.get("DASHBOARD_POLL_INTERVAL_MS", 5000)
+    progress_poll_ms = app.config.get("JOB_PROGRESS_POLL_INTERVAL_MS", 1500)
     active_log_subscribers = set()
     active_dashboard_subscribers = set()
+    active_progress_subscribers = set()
 
     def _fetch_dashboard_snapshot():
         conn = None
@@ -123,6 +125,54 @@ def register_socket_handlers(socketio, app):
             if conn:
                 conn.close()
 
+    def _fetch_job_progress_snapshot():
+        conn = None
+        cur = None
+        try:
+            conn = get_conn()
+            cur = get_cursor(conn)
+            cur.execute(
+                """
+                SELECT
+                  job_key,
+                  job_type,
+                  job_label,
+                  status,
+                  progress_percent,
+                  current_step,
+                  total_steps,
+                  detail,
+                  updated_at
+                FROM job_progress
+                WHERE status = 'RUNNING'
+                ORDER BY updated_at DESC, job_key ASC
+                """
+            )
+            rows = cur.fetchall() or []
+            result = []
+            for row in rows:
+                result.append(
+                    {
+                        "job_key": row.get("job_key"),
+                        "job_type": row.get("job_type"),
+                        "job_label": row.get("job_label"),
+                        "status": row.get("status"),
+                        "progress_percent": float(row.get("progress_percent") or 0),
+                        "current_step": int(row.get("current_step") or 0),
+                        "total_steps": int(row.get("total_steps") or 0),
+                        "detail": row.get("detail") or "",
+                        "updated_at": row.get("updated_at").strftime("%Y-%m-%d %H:%M:%S")
+                        if row.get("updated_at")
+                        else None,
+                    }
+                )
+            return result
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+
     @socketio.on("connect")
     def on_connect():
         emit("hello", {"ok": True})
@@ -131,6 +181,7 @@ def register_socket_handlers(socketio, app):
     def on_disconnect():
         active_log_subscribers.discard(request.sid)
         active_dashboard_subscribers.discard(request.sid)
+        active_progress_subscribers.discard(request.sid)
 
     @socketio.on("subscribe_logs")
     def on_subscribe_logs(data=None):
@@ -234,3 +285,35 @@ def register_socket_handlers(socketio, app):
     @socketio.on("unsubscribe_dashboard")
     def on_unsubscribe_dashboard():
         active_dashboard_subscribers.discard(request.sid)
+
+    @socketio.on("subscribe_job_progress")
+    def on_subscribe_job_progress(data=None):
+        sid = request.sid
+        active_progress_subscribers.add(sid)
+
+        interval_ms = progress_poll_ms
+        if isinstance(data, dict):
+            try:
+                interval_ms = max(800, int(data.get("interval_ms", progress_poll_ms)))
+            except (TypeError, ValueError):
+                interval_ms = progress_poll_ms
+
+        last_hash = None
+        while sid in active_progress_subscribers:
+            try:
+                snapshot = _fetch_job_progress_snapshot()
+                current_hash = json.dumps(snapshot, sort_keys=True, default=str)
+                if current_hash != last_hash:
+                    last_hash = current_hash
+                    socketio.emit("job_progress_snapshot", snapshot, to=sid)
+            except Exception as e:
+                socketio.emit(
+                    "notify",
+                    {"type": "error", "label": "Progress", "message": f"Stream error: {e}"},
+                    to=sid,
+                )
+            socketio.sleep(interval_ms / 1000)
+
+    @socketio.on("unsubscribe_job_progress")
+    def on_unsubscribe_job_progress():
+        active_progress_subscribers.discard(request.sid)

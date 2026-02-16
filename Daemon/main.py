@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from backup import DatabaseBackup
 from parser import CVEParser
 from processor import CVEProcessor
+from progress import JobProgressReporter
 from research import GitHubPoCCollector
 
 load_dotenv()
@@ -26,6 +27,13 @@ DB_CONFIG = {
 
 cve_job_lock = threading.Lock()
 research_job_lock = threading.Lock()
+progress_lock = threading.Lock()
+progress_reporter = None
+
+JOB_CVE_FETCH = ("cve_fetch", "CVE", "NVD CVE Fetch")
+JOB_CVE_PARSE = ("cve_parse", "CVE", "CVE DB Upsert")
+JOB_EPSS_REFRESH = ("epss_refresh", "CVE", "EPSS Refresh")
+JOB_POC_RESEARCH = ("poc_research", "POC", "GitHub PoC Research")
 
 
 def log_runtime(status: str, message: str):
@@ -64,7 +72,18 @@ def get_config():
             conn.close()
 
 
+def get_progress_reporter():
+    global progress_reporter
+    if progress_reporter is not None:
+        return progress_reporter
+    with progress_lock:
+        if progress_reporter is None:
+            progress_reporter = JobProgressReporter(DB_CONFIG)
+    return progress_reporter
+
+
 def run_cve_task(config):
+    reporter = get_progress_reporter()
     start_year = int(config.get("CVE_START_YEAR"))
     start_month = int(config.get("CVE_START_MONTH"))
     interval = float(config.get("CVE_INTERVAL"))
@@ -74,17 +93,52 @@ def run_cve_task(config):
         start_month=start_month,
         db_config=DB_CONFIG,
         interval=interval,
+        progress_callback=lambda cur, total, detail: reporter.update(
+            JOB_CVE_FETCH[0], JOB_CVE_FETCH[1], JOB_CVE_FETCH[2], cur, total, detail
+        ),
     )
+    reporter.start(
+        JOB_CVE_FETCH[0],
+        JOB_CVE_FETCH[1],
+        JOB_CVE_FETCH[2],
+        total_steps=max(1, processor._total_month_count()),
+        detail="Starting NVD monthly fetch",
+    )
+
+    reporter.start(JOB_CVE_PARSE[0], JOB_CVE_PARSE[1], JOB_CVE_PARSE[2], detail="Waiting for download stage")
+    reporter.start(JOB_EPSS_REFRESH[0], JOB_EPSS_REFRESH[1], JOB_EPSS_REFRESH[2], detail="Waiting for parse stage")
+
     cve_base_dir = processor.cve_base_dir
-    cve_parser = CVEParser(DB_CONFIG, json_base_dir_path=cve_base_dir, start_year=start_year)
+    cve_parser = None
     try:
         processor.run()
+        reporter.complete(JOB_CVE_FETCH[0], JOB_CVE_FETCH[1], JOB_CVE_FETCH[2], detail="NVD monthly fetch completed")
+        cve_parser = CVEParser(
+            DB_CONFIG,
+            json_base_dir_path=cve_base_dir,
+            start_year=start_year,
+            parse_progress_callback=lambda cur, total, detail: reporter.update(
+                JOB_CVE_PARSE[0], JOB_CVE_PARSE[1], JOB_CVE_PARSE[2], cur, total, detail
+            ),
+            epss_progress_callback=lambda cur, total, detail: reporter.update(
+                JOB_EPSS_REFRESH[0], JOB_EPSS_REFRESH[1], JOB_EPSS_REFRESH[2], cur, total, detail
+            ),
+        )
         cve_parser.process_data()
+        reporter.complete(JOB_CVE_PARSE[0], JOB_CVE_PARSE[1], JOB_CVE_PARSE[2], detail="CVE DB upsert completed")
+        reporter.complete(JOB_EPSS_REFRESH[0], JOB_EPSS_REFRESH[1], JOB_EPSS_REFRESH[2], detail="EPSS refresh completed")
+    except Exception as err:
+        reporter.fail(JOB_CVE_FETCH[0], JOB_CVE_FETCH[1], JOB_CVE_FETCH[2], f"Failed: {err}")
+        reporter.fail(JOB_CVE_PARSE[0], JOB_CVE_PARSE[1], JOB_CVE_PARSE[2], f"Failed: {err}")
+        reporter.fail(JOB_EPSS_REFRESH[0], JOB_EPSS_REFRESH[1], JOB_EPSS_REFRESH[2], f"Failed: {err}")
+        raise
     finally:
-        cve_parser.commit_and_close()
+        if cve_parser:
+            cve_parser.commit_and_close()
 
 
 def run_github_task(config):
+    reporter = get_progress_reporter()
     token = config.get("RESEARCH_GITHUB_TOKEN")
     request_interval = float(config.get("RESEARCH_REQUEST_INTERVAL"))
     download_interval = float(config.get("RESEARCH_DOWNLOAD_INTERVAL"))
@@ -103,8 +157,17 @@ def run_github_task(config):
         max_threads=int(config.get("RESEARCH_MAX_THREADS")),
         research_wait_minutes=int(config.get("RESEARCH_WAIT_MINUTES")),
         rate_limit_threshold=int(config.get("RESEARCH_RATE_LIMIT_THRESHOLD")),
+        progress_callback=lambda cur, total, detail: reporter.update(
+            JOB_POC_RESEARCH[0], JOB_POC_RESEARCH[1], JOB_POC_RESEARCH[2], cur, total, detail
+        ),
     )
-    collector.process()
+    reporter.start(JOB_POC_RESEARCH[0], JOB_POC_RESEARCH[1], JOB_POC_RESEARCH[2], detail="Starting GitHub PoC research")
+    try:
+        collector.process()
+        reporter.complete(JOB_POC_RESEARCH[0], JOB_POC_RESEARCH[1], JOB_POC_RESEARCH[2], detail="GitHub PoC research completed")
+    except Exception as err:
+        reporter.fail(JOB_POC_RESEARCH[0], JOB_POC_RESEARCH[1], JOB_POC_RESEARCH[2], f"Failed: {err}")
+        raise
 
 
 def _run_cve_job():
@@ -192,6 +255,10 @@ def update_schedule_if_needed(prev_research_time, prev_cve_interval, prev_cve_mi
 
 if __name__ == "__main__":
     config = get_config()
+    try:
+        get_progress_reporter().reset_running_to_error("Daemon restarted")
+    except Exception:
+        pass
     current_research_time, current_cve_interval, current_cve_minute = _apply_schedule(config)
     last_reload_minute = None
 

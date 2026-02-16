@@ -46,8 +46,11 @@
     }
     .detail-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      grid-template-columns: 1fr;
       gap: 0.9rem;
+    }
+    .detail-grid > .card {
+      width: 100%;
     }
     .detail-hero {
       min-height: auto !important;
@@ -60,8 +63,18 @@
     #detail-cvss .table-wrap table {
       min-width: 1120px;
     }
+    #detail-cvss .table-wrap th,
+    #detail-cvss .table-wrap td {
+      text-align: center;
+      vertical-align: middle;
+    }
     #detail-weaknesses .table-wrap table {
       min-width: 760px;
+    }
+    #detail-weaknesses .table-wrap th,
+    #detail-weaknesses .table-wrap td {
+      text-align: center;
+      vertical-align: middle;
     }
     #detail-references .table-wrap table {
       min-width: 900px;
@@ -97,22 +110,6 @@
     .detail-grid .table-wrap .link-btn:hover {
       color: #baf5ff;
     }
-    #detail-descriptions {
-      grid-column: span 2;
-    }
-    #detail-cvss {
-      grid-column: span 2;
-    }
-    #detail-references {
-      grid-column: span 2;
-    }
-    @media (max-width: 1200px) {
-      #detail-descriptions,
-      #detail-cvss,
-      #detail-references {
-        grid-column: auto;
-      }
-    }
     .detail-pill-wrap {
       display: flex;
       flex-wrap: wrap;
@@ -130,9 +127,19 @@
     }
     .detail-meta {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 0.55rem;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 0.42rem;
       margin-top: 0.55rem;
+    }
+    @media (max-width: 1450px) {
+      .detail-meta {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+    @media (max-width: 980px) {
+      .detail-meta {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
     .detail-meta div {
       border: 1px solid rgba(108, 160, 235, 0.52);
@@ -358,7 +365,14 @@
           <div class="json-block">{{ row.cpe_match | tojson(indent=2) }}</div>
         {% endfor %}
       {% else %}
-        <p class="empty-note">No configuration data available.</p>
+        {% set status = (vuln.vuln_status or '')|lower %}
+        {% if status in ['received', 'awaiting analysis', 'undergoing analysis'] %}
+          <p class="empty-note">NVD has not published CPE configuration data for this CVE yet (status: {{ vuln.vuln_status }}).</p>
+        {% elif status == 'rejected' %}
+          <p class="empty-note">This CVE is rejected in NVD, so configuration data is not provided.</p>
+        {% else %}
+          <p class="empty-note">No configuration data available.</p>
+        {% endif %}
       {% endif %}
     </section>
 
